@@ -1,4 +1,4 @@
-import { createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut } from "firebase/auth";
+import { createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, sendPasswordResetEmail } from "firebase/auth";
 import { doc, setDoc, getDoc } from "firebase/firestore";
 import { auth, db } from "../config/firebase";
 
@@ -37,6 +37,16 @@ export const loginUser = async (email, password) => {
     const userInfo = userDoc.exists() ? userDoc.data() : null;
 
     return { success: true, user, userInfo };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+};
+
+// Réinitialisation du mot de passe (Mot de passe oublié)
+export const resetPassword = async (email) => {
+  try {
+    await sendPasswordResetEmail(auth, email);
+    return { success: true };
   } catch (error) {
     return { success: false, error: error.message };
   }

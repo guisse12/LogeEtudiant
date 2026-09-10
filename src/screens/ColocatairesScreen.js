@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useCallback } from 'react';
 import { 
   StyleSheet, 
   Text, 
@@ -19,7 +19,7 @@ const UNIVERSITES = [
   { id: 'USSEIN', nom: 'USSEIN (Sine Saloum)'},
   { id: 'UASZ', nom: 'UASZ (Ziguinchor)' },
   { id: 'UIDT', nom: 'UIDT (Thiès)' },
-    { id: 'UAM', nom: 'UAM (Diamniadio)'},
+  { id: 'UAM', nom: 'UAM (Diamniadio)'},
 ];
 
 export default function ColocatairesScreen({ navigation }) {

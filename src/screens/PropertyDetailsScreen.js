@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { StyleSheet, Text, View, ScrollView, Image, TouchableOpacity, Linking, TextInput, Alert, ActivityIndicator, Dimensions } from 'react-native';
 import MapView, { Marker } from 'react-native-maps';
-import { Video, ResizeMode } from 'expo-av'; // Import pour la lecture des vidéos
 import { collection, addDoc, getDocs, doc, setDoc, deleteDoc, getDoc, query, orderBy, where, serverTimestamp } from 'firebase/firestore';
 import { db, auth } from '../config/firebase';
 
@@ -233,13 +232,16 @@ export default function PropertyDetailsScreen({ route, navigation }) {
             if (isVideo(mediaUri)) {
               return (
                 <View key={index} style={styles.mediaContainer}>
-                  <Video
-                    source={{ uri: mediaUri }}
-                    style={styles.propertyMedia}
-                    useNativeControls
-                    resizeMode={ResizeMode.CONTAIN}
-                    isLooping={false}
-                  />
+                  <View style={[styles.propertyImage, { backgroundColor: '#000', justifyContent: 'center', alignItems: 'center' }]}>
+                    <Text style={{ color: '#FFF', fontSize: 32, marginBottom: 5 }}>▶️</Text>
+                    <Text style={{ color: '#FFF', fontSize: 14, fontWeight: 'bold' }}>Média Vidéo</Text>
+                    <TouchableOpacity 
+                      style={{ marginTop: 10, backgroundColor: '#3182CE', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 6 }}
+                      onPress={() => Linking.openURL(mediaUri)}
+                    >
+                      <Text style={{ color: '#FFF', fontSize: 12, fontWeight: 'bold' }}>Ouvrir la vidéo 🔗</Text>
+                    </TouchableOpacity>
+                  </View>
                 </View>
               );
             } else {

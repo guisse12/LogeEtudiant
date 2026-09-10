@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { StyleSheet, Text, TextInput, TouchableOpacity, View, Alert, ActivityIndicator } from 'react-native';
-import { loginUser } from '../services/authService';
+import { loginUser, resetPassword } from '../services/authService'; // Assure-toi d'importer ta fonction de réinitialisation
 
 export default function LoginScreen({ navigation }) {
   const [email, setEmail] = useState('');
@@ -14,19 +14,44 @@ export default function LoginScreen({ navigation }) {
     }
 
     setLoading(true);
-    const result = await loginUser(email, password);
-    setLoading(false);
+    try {
+      const result = await loginUser(email, password);
 
-    if (result.success) {
-      // Redirection selon le rôle récupéré de Firestore
-      const role = result.userInfo?.role;
-      if (role === 'bailleur') {
-        navigation.replace('BailleurHome'); // Écran principal du bailleur
+      if (result.success) {
+        const role = result.userInfo?.role;
+        if (role === 'bailleur') {
+          navigation.replace('BailleurHome');
+        } else {
+          navigation.replace('EtudiantHome');
+        }
       } else {
-        navigation.replace('EtudiantHome'); // Écran principal de l'étudiant
+        Alert.alert('Erreur de connexion', result.error);
       }
-    } else {
-      Alert.alert('Erreur de connexion', result.error);
+    } catch (error) {
+      Alert.alert('Erreur', 'Une erreur technique est survenue.');
+    } finally {
+      // GARANTIE : Le chargement s'arrêtera dans tous les cas (succès ou échec)
+      setLoading(false);
+    }
+  };
+
+  // Fonction pour gérer le mot de passe oublié
+  const handleForgotPassword = async () => {
+    if (!email) {
+      Alert.alert('Champ requis', 'Veuillez entrer votre adresse email ci-dessus pour réinitialiser votre mot de passe.');
+      return;
+    }
+
+    try {
+      // Appel de la fonction de réinitialisation (ex: Firebase sendPasswordResetEmail)
+      const result = await resetPassword(email);
+      if (result.success) {
+        Alert.alert('Succès', 'Un lien de réinitialisation a été envoyé à votre adresse email.');
+      } else {
+        Alert.alert('Erreur', result.error);
+      }
+    } catch (error) {
+      Alert.alert('Erreur', 'Une erreur est survenue lors de l\'envoi du mail de réinitialisation.');
     }
   };
 
@@ -50,6 +75,11 @@ export default function LoginScreen({ navigation }) {
         onChangeText={setPassword}
         secureTextEntry
       />
+
+      {/* Lien Mot de passe oublié */}
+      <TouchableOpacity onPress={handleForgotPassword} style={styles.forgotPasswordContainer}>
+        <Text style={styles.forgotPasswordText}>Mot de passe oublié ?</Text>
+      </TouchableOpacity>
 
       <TouchableOpacity style={styles.button} onPress={handleLogin} disabled={loading}>
         {loading ? (
@@ -94,6 +124,14 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     marginBottom: 15,
     fontSize: 16,
+  },
+  forgotPasswordContainer: {
+    alignItems: 'flex-end',
+    marginBottom: 15,
+  },
+  forgotPasswordText: {
+    color: '#3182CE',
+    fontSize: 14,
   },
   button: {
     backgroundColor: '#3182CE',
