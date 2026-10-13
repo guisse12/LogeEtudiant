@@ -33,7 +33,7 @@ export default function BailleurHomeScreen({ navigation }) {
   const [adresse, setAdresse] = useState('');
   const [mediasUris, setMediasUris] = useState([]); // Tableau pour stocker jusqu'à 30 photos/vidéos
   
-  // Coordonnées géographiques pour la carte interactive
+  // Coordonnées géographiques pour la carte interactive (Dakar par défaut)
   const [latitude, setLatitude] = useState(14.69275);
   const [longitude, setLongitude] = useState(-17.44667);
 
@@ -58,7 +58,7 @@ export default function BailleurHomeScreen({ navigation }) {
     fetchMesBiens();
   }, []);
 
-  // Fonction pour centrer la carte sur la position actuelle du bailleur
+  // Fonction optionnelle pour centrer la carte sur la position actuelle si le bailleur le souhaite
   const handleUseCurrentLocation = async () => {
     try {
       let { status } = await Location.requestForegroundPermissionsAsync();
@@ -72,11 +72,8 @@ export default function BailleurHomeScreen({ navigation }) {
       
       setLatitude(lat);
       setLongitude(lng);
-      
-      Alert.alert("Succès", "La carte a été centrée sur votre position actuelle.");
     } catch (error) {
       console.error("Erreur géolocalisation :", error);
-      Alert.alert("Erreur", "Impossible de récupérer votre position.");
     }
   };
 
@@ -97,7 +94,7 @@ export default function BailleurHomeScreen({ navigation }) {
       }
 
       const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ['images'], // Syntaxe moderne corrigée (évite le warning deprecated)
+        mediaTypes: ['images'],
         allowsMultipleSelection: true,
         selectionLimit: remainingSlots,
         quality: 0.7,
@@ -159,16 +156,31 @@ export default function BailleurHomeScreen({ navigation }) {
     }
 
     try {
+      // 1. Vérification des doublons si c'est une NOUVELLE publication
+      if (!editingBien) {
+        const propertiesRef = collection(db, "properties");
+        const qCheck = query(propertiesRef, where("localisation.adresse", "==", adresse.trim()));
+        const querySnapshot = await getDocs(qCheck);
+
+        if (!querySnapshot.empty) {
+          Alert.alert(
+            "Doublon détecté", 
+            "Un bien immobilier avec cette même adresse est déjà enregistré sur la plateforme."
+          );
+          return;
+        }
+      }
+
       const propertyData = {
-        titre,
-        description,
+        titre: titre.trim(),
+        description: description.trim(),
         prix: Number(prix),
         type,
         universiteId,
         telephoneProprietaire: telephone,
         proprietaireId: auth.currentUser.uid,
         localisation: {
-          adresse,
+          adresse: adresse.trim(),
           latitude,
           longitude,
         },
@@ -227,7 +239,6 @@ export default function BailleurHomeScreen({ navigation }) {
     ? biens 
     : biens.filter(item => item.universiteId === selectedFilterZone);
 
-  // Fonction extraite pour le rendu d'une carte (réduit la complexité cyclomatique)
   const renderPropertyCard = (item) => (
     <View key={item.id} style={styles.propertyCard}>
       {item.images && item.images.length > 0 && (
@@ -265,9 +276,14 @@ export default function BailleurHomeScreen({ navigation }) {
             <Text style={styles.headerSubtitle}>Gérez vos biens immobiliers</Text>
           </View>
           <View style={styles.headerActions}>
+            <TouchableOpacity onPress={() => navigation.navigate('Profile')} style={styles.profileButton}>
+              <Text style={styles.profileButtonText}>👤 Profil</Text>
+            </TouchableOpacity>
+
             <TouchableOpacity onPress={() => navigation.navigate('Conversations')} style={styles.msgButton}>
               <Text style={styles.msgButtonText}>💬 Messages</Text>
             </TouchableOpacity>
+
             <TouchableOpacity onPress={handleLogout} style={styles.logoutButton}>
               <Text style={styles.logoutText}>Sortie</Text>
             </TouchableOpacity>
@@ -329,11 +345,10 @@ export default function BailleurHomeScreen({ navigation }) {
               <TextInput style={styles.input} placeholder="Adresse précise" value={adresse} onChangeText={setAdresse} />
               <TextInput style={styles.input} placeholder="Téléphone de contact (WhatsApp)" value={telephone} onChangeText={setTelephone} keyboardType="phone-pad" />
               
-              {/* Sélection de la position géographique sur la carte */}
               <View style={styles.mapHeaderRow}>
                 <Text style={styles.labelZone}>Localisation exacte :</Text>
                 <TouchableOpacity onPress={handleUseCurrentLocation} style={styles.gpsButton}>
-                  <Text style={styles.gpsButtonText}>📍 Ma position</Text>
+                  <Text style={styles.gpsButtonText}>📍 Centrer sur moi</Text>
                 </TouchableOpacity>
               </View>
 
@@ -343,33 +358,30 @@ export default function BailleurHomeScreen({ navigation }) {
                   region={{
                     latitude: latitude,
                     longitude: longitude,
-                    latitudeDelta: 0.005,
-                    longitudeDelta: 0.005,
+                    latitudeDelta: 0.05,
+                    longitudeDelta: 0.05,
+                  }}
+                  onPress={(e) => {
+                    const coord = e.nativeEvent.coordinate;
+                    setLatitude(coord.latitude);
+                    setLongitude(coord.longitude);
                   }}
                 >
                   <Marker
                     coordinate={{ latitude, longitude }}
-                    draggable
-                    onDragEnd={(e) => {
-                      const coord = e.nativeEvent.coordinate;
-                      setLatitude(coord.latitude);
-                      setLongitude(coord.longitude);
-                    }}
                     title="Emplacement du logement"
-                    description="Glissez le marqueur sur le bâtiment exact"
+                    description="Position sélectionnée"
                   />
                 </MapView>
               </View>
-              <Text style={styles.coordsText}>Lat: {latitude.toFixed(4)}, Lng: {longitude.toFixed(4)}</Text>
+              <Text style={styles.coordsText}>Touchez la carte à l'endroit exact du logement pour placer le repère</Text>
 
-              {/* Bouton de sélection multiple photos/vidéos */}
               <TouchableOpacity style={styles.imagePickerButton} onPress={handlePickMedias}>
                 <Text style={styles.imagePickerButtonText}>📁 Choisir photos ou vidéos (Max 30)</Text>
               </TouchableOpacity>
 
               <Text style={styles.counterText}>Médias sélectionnés : {mediasUris.length} / 30</Text>
 
-              {/* Aperçu horizontal des médias sélectionnés */}
               {mediasUris.length > 0 && (
                 <ScrollView horizontal showsHorizontalIndicator={false} style={styles.previewScroll}>
                   {mediasUris.map((uri, index) => (
@@ -427,7 +439,9 @@ const styles = StyleSheet.create({
   headerTitle: { fontSize: 22, fontWeight: 'bold', color: '#1A365D' },
   headerSubtitle: { fontSize: 12, color: '#718096' },
   headerActions: { flexDirection: 'row', alignItems: 'center' },
-  msgButton: { backgroundColor: '#EDF2F7', paddingHorizontal: 8, paddingVertical: 6, borderRadius: 6, marginRight: 8, borderWidth: 1, borderColor: '#CBD5E0' },
+  profileButton: { backgroundColor: '#EBF8FF', paddingHorizontal: 8, paddingVertical: 6, borderRadius: 6, marginRight: 6, borderWidth: 1, borderColor: '#BEE3F8' },
+  profileButtonText: { color: '#3182CE', fontWeight: 'bold', fontSize: 12 },
+  msgButton: { backgroundColor: '#EDF2F7', paddingHorizontal: 8, paddingVertical: 6, borderRadius: 6, marginRight: 6, borderWidth: 1, borderColor: '#CBD5E0' },
   msgButtonText: { color: '#2D3748', fontWeight: 'bold', fontSize: 12 },
   logoutButton: { padding: 6 },
   logoutText: { color: '#E53E3E', fontWeight: 'bold', fontSize: 12 },

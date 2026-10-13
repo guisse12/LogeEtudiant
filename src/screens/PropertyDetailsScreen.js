@@ -1,6 +1,18 @@
 import React, { useState, useEffect } from 'react';
-import { StyleSheet, Text, View, ScrollView, Image, TouchableOpacity, Linking, TextInput, Alert, ActivityIndicator, Dimensions } from 'react-native';
-import MapView, { Marker } from 'react-native-maps';
+import { 
+  StyleSheet, 
+  Text, 
+  View, 
+  ScrollView, 
+  Image, 
+  TouchableOpacity, 
+  Linking, 
+  TextInput, 
+  Alert, 
+  ActivityIndicator, 
+  Dimensions 
+} from 'react-native';
+import { WebView } from 'react-native-webview';
 import { collection, addDoc, getDocs, doc, setDoc, deleteDoc, getDoc, query, orderBy, where, serverTimestamp } from 'firebase/firestore';
 import { db, auth } from '../config/firebase';
 
@@ -91,7 +103,7 @@ export default function PropertyDetailsScreen({ route, navigation }) {
         userEmail: auth.currentUser?.email || "Étudiant",
         rating: ratingNum,
         comment: newComment.trim(),
-        createdAt: new Date(),
+        createdAt: serverTimestamp(),
       });
 
       Alert.alert("Succès", "Votre avis a été publié !");
@@ -105,12 +117,12 @@ export default function PropertyDetailsScreen({ route, navigation }) {
   };
 
   const averageRating = reviews.length > 0 
-    ? (reviews.reduce((acc, curr) => acc + curr.rating, 0) / reviews.length).toFixed(1) 
+    ? (reviews.reduce((acc, curr) => acc + (curr.rating || 0), 0) / reviews.length).toFixed(1) 
     : 'N/A';
 
-  const handleContactPropriétaire = (telephone, titreBien) => {
+  const handleContactProprietaire = (telephone, titreBien) => {
     if (!telephone) {
-      alert("Le numéro de téléphone du propriétaire n'est pas disponible pour ce bien.");
+      Alert.alert("Information", "Le numéro de téléphone du propriétaire n'est pas disponible pour ce bien.");
       return;
     }
 
@@ -197,14 +209,12 @@ export default function PropertyDetailsScreen({ route, navigation }) {
     }
   };
 
-  // Fonction utilitaire pour détecter si l'URI correspond à une vidéo
   const isVideo = (uri) => {
     if (!uri) return false;
     const lower = uri.toLowerCase();
-    return lower.includes('.mp4') || lower.includes('.mov') || lower.includes('video') || lower.includes('m4v');
+    return lower.includes('.mp4') || lower.includes('.mov') || lower.includes('video') || lower.includes('m4v') || lower.includes('youtube') || lower.includes('embed');
   };
 
-  // Récupérer la liste des médias (gère 'images' ou 'medias')
   const mediaList = property.images || property.medias || [];
 
   return (
@@ -225,23 +235,18 @@ export default function PropertyDetailsScreen({ route, navigation }) {
         </TouchableOpacity>
       </View>
 
-      {/* Galerie dynamique gérant jusqu'à 30 photos ou vidéos */}
       {mediaList.length > 0 ? (
-        <ScrollView horizontal pagingEnabled showsHorizontalIndicator={false} style={styles.imageScrollContainer}>
+        <ScrollView horizontal pagingEnabled showsHorizontalScrollIndicator={false} style={styles.imageScrollContainer}>
           {mediaList.map((mediaUri, index) => {
             if (isVideo(mediaUri)) {
               return (
                 <View key={index} style={styles.mediaContainer}>
-                  <View style={[styles.propertyImage, { backgroundColor: '#000', justifyContent: 'center', alignItems: 'center' }]}>
-                    <Text style={{ color: '#FFF', fontSize: 32, marginBottom: 5 }}>▶️</Text>
-                    <Text style={{ color: '#FFF', fontSize: 14, fontWeight: 'bold' }}>Média Vidéo</Text>
-                    <TouchableOpacity 
-                      style={{ marginTop: 10, backgroundColor: '#3182CE', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 6 }}
-                      onPress={() => Linking.openURL(mediaUri)}
-                    >
-                      <Text style={{ color: '#FFF', fontSize: 12, fontWeight: 'bold' }}>Ouvrir la vidéo 🔗</Text>
-                    </TouchableOpacity>
-                  </View>
+                  <WebView 
+                    source={{ uri: mediaUri }} 
+                    style={styles.propertyImage} 
+                    allowsFullscreenVideo={true}
+                    javaScriptEnabled={true}
+                  />
                 </View>
               );
             } else {
@@ -262,10 +267,10 @@ export default function PropertyDetailsScreen({ route, navigation }) {
 
       <View style={styles.badgeContainer}>
         <View style={styles.propertyBadge}>
-          <Text style={styles.propertyBadgeText}>{property.universiteId}</Text>
+          <Text style={styles.propertyBadgeText}>{property.universiteId || "Campus"}</Text>
         </View>
         <View style={styles.typeBadge}>
-          <Text style={styles.typeBadgeText}>{property.type}</Text>
+          <Text style={styles.typeBadgeText}>{property.type || "Logement"}</Text>
         </View>
         <View style={styles.ratingBadge}>
           <Text style={styles.ratingBadgeText}>⭐ {averageRating} {reviews.length > 0 ? `(${reviews.length})` : ''}</Text>
@@ -288,28 +293,18 @@ export default function PropertyDetailsScreen({ route, navigation }) {
         <Text style={styles.sectionTitle}>Localisation</Text>
         <Text style={styles.addressText}>📍 {property.localisation?.adresse || "Adresse non spécifiée"}</Text>
         
-        <View style={styles.mapContainer}>
-          <MapView 
-            style={styles.map}
-            initialRegion={{
-              latitude: property.localisation?.latitude || 14.69275,
-              longitude: property.localisation?.longitude || -17.44667,
-              latitudeDelta: 0.01,
-              longitudeDelta: 0.01,
-            }}
-            scrollEnabled={false}
-            zoomEnabled={false}
-          >
-            <Marker 
-              coordinate={{
-                latitude: property.localisation?.latitude || 14.69275,
-                longitude: property.localisation?.longitude || -17.44667,
-              }}
-              title={property.titre}
-              description={property.localisation?.adresse}
-            />
-          </MapView>
-        </View>
+        <TouchableOpacity 
+          style={styles.mapContainer}
+          onPress={() => {
+            const lat = property.localisation?.latitude || 14.69275;
+            const lng = property.localisation?.longitude || -17.44667;
+            Linking.openURL(`https://www.google.com/maps/search/?api=1&query=${lat},${lng}`);
+          }}
+        >
+          <Text style={{ fontSize: 24, marginBottom: 5 }}>🗺️</Text>
+          <Text style={{ color: '#3182CE', fontWeight: 'bold', fontSize: 14 }}>Ouvrir l'emplacement sur Google Maps</Text>
+          <Text style={{ color: '#718096', fontSize: 12, marginTop: 2 }}>{property.localisation?.adresse || "Cliquer pour voir l'itinéraire"}</Text>
+        </TouchableOpacity>
       </View>
 
       <View style={styles.sectionCard}>
@@ -357,7 +352,7 @@ export default function PropertyDetailsScreen({ route, navigation }) {
 
       <TouchableOpacity 
         style={styles.contactButton}
-        onPress={() => handleContactPropriétaire(property.telephoneProprietaire || property.telephone, property.titre)}
+        onPress={() => handleContactProprietaire(property.telephoneProprietaire || property.telephone, property.titre)}
       >
         <Text style={styles.contactButtonText}>📞 Contacter par WhatsApp / Téléphone</Text>
       </TouchableOpacity>
@@ -375,7 +370,6 @@ const styles = StyleSheet.create({
   imageScrollContainer: { marginBottom: 15, height: 220, borderRadius: 12 },
   mediaContainer: { width: width - 40, height: 220, marginRight: 10, borderRadius: 12, overflow: 'hidden', backgroundColor: '#000' },
   propertyImage: { width: '100%', height: '100%', borderRadius: 12, resizeMode: 'cover' },
-  propertyMedia: { width: '100%', height: '100%' },
   badgeContainer: { flexDirection: 'row', marginBottom: 10, alignItems: 'center' },
   propertyBadge: { backgroundColor: '#EBF8FF', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 6, marginRight: 8 },
   propertyBadgeText: { color: '#3182CE', fontSize: 13, fontWeight: 'bold' },
@@ -392,8 +386,7 @@ const styles = StyleSheet.create({
   sectionTitle: { fontSize: 16, fontWeight: 'bold', color: '#2D3748', marginBottom: 10 },
   propertyDescription: { fontSize: 14, color: '#4A5568', lineHeight: 20 },
   addressText: { fontSize: 14, color: '#4A5568', marginBottom: 10 },
-  mapContainer: { height: 180, borderRadius: 8, overflow: 'hidden', borderWidth: 1, borderColor: '#E2E8F0' },
-  map: { flex: 1 },
+  mapContainer: { height: 130, backgroundColor: '#EDF2F7', borderRadius: 8, borderWidth: 1, borderColor: '#CBD5E0', justifyContent: 'center', alignItems: 'center', padding: 10 },
   reviewForm: { marginBottom: 15, paddingBottom: 15, borderBottomWidth: 1, borderBottomColor: '#EDF2F7' },
   subLabel: { fontSize: 13, fontWeight: '600', color: '#4A5568', marginBottom: 6 },
   reviewInputRow: { flexDirection: 'row', marginBottom: 8 },

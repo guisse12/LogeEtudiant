@@ -22,7 +22,18 @@ export const registerUser = async (email, password, userData) => {
 
     return { success: true, user };
   } catch (error) {
-    return { success: false, error: error.message };
+    let errorMessage = "Une erreur est survenue lors de l'inscription.";
+
+    // Traduction des erreurs Firebase courantes en français
+    if (error.code === 'auth/email-already-in-use') {
+      errorMessage = "Cette adresse e-mail est déjà utilisée.";
+    } else if (error.code === 'auth/invalid-email') {
+      errorMessage = "Adresse e-mail invalide.";
+    } else if (error.code === 'auth/weak-password') {
+      errorMessage = "Le mot de passe est trop faible (6 caractères minimum).";
+    }
+
+    return { success: false, error: errorMessage };
   }
 };
 
@@ -38,7 +49,15 @@ export const loginUser = async (email, password) => {
 
     return { success: true, user, userInfo };
   } catch (error) {
-    return { success: false, error: error.message };
+    let errorMessage = "Erreur de connexion.";
+
+    if (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential') {
+      errorMessage = "Email ou mot de passe incorrect.";
+    } else if (error.code === 'auth/invalid-email') {
+      errorMessage = "Format d'email invalide.";
+    }
+
+    return { success: false, error: errorMessage };
   }
 };
 
@@ -48,7 +67,15 @@ export const resetPassword = async (email) => {
     await sendPasswordResetEmail(auth, email);
     return { success: true };
   } catch (error) {
-    return { success: false, error: error.message };
+    let errorMessage = "Impossible d'envoyer l'e-mail de réinitialisation.";
+
+    if (error.code === 'auth/user-not-found') {
+      errorMessage = "Aucun compte ne correspond à cette adresse e-mail.";
+    } else if (error.code === 'auth/invalid-email') {
+      errorMessage = "Adresse e-mail invalide.";
+    }
+
+    return { success: false, error: errorMessage };
   }
 };
 

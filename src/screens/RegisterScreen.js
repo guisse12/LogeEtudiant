@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { StyleSheet, Text, TextInput, TouchableOpacity, View, ScrollView, Alert, ActivityIndicator } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { registerUser } from '../services/authService';
 
 export default function RegisterScreen({ navigation }) {
@@ -8,6 +9,7 @@ export default function RegisterScreen({ navigation }) {
   const [email, setEmail] = useState('');
   const [telephone, setTelephone] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [role, setRole] = useState('etudiant'); // Par défaut : étudiant
   const [loading, setLoading] = useState(false);
 
@@ -18,7 +20,17 @@ export default function RegisterScreen({ navigation }) {
     }
 
     setLoading(true);
-    const userData = { nom, prenom, telephone, role };
+    // On combine le prénom et le nom pour former le nom complet
+    const nomComplet = `${prenom.trim()} ${nom.trim()}`;
+    
+    const userData = { 
+      nom: nomComplet,     // Enregistre le nom complet combiné
+      prenom: prenom.trim(), // Gardé au cas où
+      nomFamille: nom.trim(),
+      telephone: telephone.trim(), 
+      role 
+    };
+
     const result = await registerUser(email, password, userData);
     setLoading(false);
 
@@ -85,13 +97,24 @@ export default function RegisterScreen({ navigation }) {
         autoCapitalize="none"
         keyboardType="email-address"
       />
-      <TextInput
-        style={styles.input}
-        placeholder="Mot de passe"
-        value={password}
-        onChangeText={setPassword}
-        secureTextEntry
-      />
+
+      {/* Champ Mot de passe avec icône œil intégrée */}
+      <View style={[styles.inputContainer, styles.input]}>
+        <TextInput
+          style={styles.passwordInput}
+          placeholder="Mot de passe"
+          value={password}
+          onChangeText={setPassword}
+          secureTextEntry={!showPassword}
+        />
+        <TouchableOpacity onPress={() => setShowPassword(!showPassword)} style={styles.eyeIcon}>
+          <Ionicons 
+            name={showPassword ? "eye-off" : "eye"} 
+            size={22} 
+            color="#718096" 
+          />
+        </TouchableOpacity>
+      </View>
 
       <TouchableOpacity style={styles.button} onPress={handleRegister} disabled={loading}>
         {loading ? (
@@ -167,6 +190,20 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     marginBottom: 15,
     fontSize: 16,
+  },
+  inputContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 0,
+  },
+  passwordInput: {
+    flex: 1,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    fontSize: 16,
+  },
+  eyeIcon: {
+    paddingRight: 12,
   },
   button: {
     backgroundColor: '#3182CE',

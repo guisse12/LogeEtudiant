@@ -1,10 +1,12 @@
 import React, { useState } from 'react';
 import { StyleSheet, Text, TextInput, TouchableOpacity, View, Alert, ActivityIndicator } from 'react-native';
-import { loginUser, resetPassword } from '../services/authService'; // Assure-toi d'importer ta fonction de réinitialisation
+import { Ionicons } from '@expo/vector-icons';
+import { loginUser, resetPassword } from '../services/authService';
 
 export default function LoginScreen({ navigation }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
 
   const handleLogin = async () => {
@@ -30,12 +32,10 @@ export default function LoginScreen({ navigation }) {
     } catch (error) {
       Alert.alert('Erreur', 'Une erreur technique est survenue.');
     } finally {
-      // GARANTIE : Le chargement s'arrêtera dans tous les cas (succès ou échec)
       setLoading(false);
     }
   };
 
-  // Fonction pour gérer le mot de passe oublié
   const handleForgotPassword = async () => {
     if (!email) {
       Alert.alert('Champ requis', 'Veuillez entrer votre adresse email ci-dessus pour réinitialiser votre mot de passe.');
@@ -43,7 +43,6 @@ export default function LoginScreen({ navigation }) {
     }
 
     try {
-      // Appel de la fonction de réinitialisation (ex: Firebase sendPasswordResetEmail)
       const result = await resetPassword(email);
       if (result.success) {
         Alert.alert('Succès', 'Un lien de réinitialisation a été envoyé à votre adresse email.');
@@ -68,13 +67,24 @@ export default function LoginScreen({ navigation }) {
         autoCapitalize="none"
         keyboardType="email-address"
       />
-      <TextInput
-        style={styles.input}
-        placeholder="Mot de passe"
-        value={password}
-        onChangeText={setPassword}
-        secureTextEntry
-      />
+
+      {/* Champ Mot de passe avec icône œil intégrée */}
+      <View style={[styles.inputContainer, styles.input]}>
+        <TextInput
+          style={styles.passwordInput}
+          placeholder="Mot de passe"
+          value={password}
+          onChangeText={setPassword}
+          secureTextEntry={!showPassword}
+        />
+        <TouchableOpacity onPress={() => setShowPassword(!showPassword)} style={styles.eyeIcon}>
+          <Ionicons 
+            name={showPassword ? "eye-off" : "eye"} 
+            size={22} 
+            color="#718096" 
+          />
+        </TouchableOpacity>
+      </View>
 
       {/* Lien Mot de passe oublié */}
       <TouchableOpacity onPress={handleForgotPassword} style={styles.forgotPasswordContainer}>
@@ -88,10 +98,19 @@ export default function LoginScreen({ navigation }) {
           <Text style={styles.buttonText}>Se connecter</Text>
         )}
       </TouchableOpacity>
-
-      <TouchableOpacity onPress={() => navigation.navigate('Register')}>
-        <Text style={styles.linkText}>Pas encore de compte ? S'inscrire</Text>
-      </TouchableOpacity>
+      
+      {/* Lien Inscription sur la même ligne */}
+      <View style={{ alignItems: 'center', marginTop: 20 }}>
+        <Text style={{ color: '#666', fontSize: 14 }}>
+          Pas encore de compte ?{' '}
+          <Text 
+            style={{ color: '#3182CE', fontWeight: 'bold' }} 
+            onPress={() => navigation.navigate('Register')}
+          >
+            S'inscrire
+          </Text>
+        </Text>
+      </View>
     </View>
   );
 }
@@ -124,6 +143,20 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     marginBottom: 15,
     fontSize: 16,
+  },
+  inputContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 0, // Remet à zéro pour laisser le TextInput interne gérer l'espace
+  },
+  passwordInput: {
+    flex: 1,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    fontSize: 16,
+  },
+  eyeIcon: {
+    paddingRight: 12,
   },
   forgotPasswordContainer: {
     alignItems: 'flex-end',

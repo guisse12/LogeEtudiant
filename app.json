@@ -13,14 +13,29 @@
       "backgroundColor": "#ffffff"
     },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "infoPlist": {
+        "LSApplicationQueriesSchemes": [
+          "whatsapp",
+          "tel",
+          "mailto",
+          "comgooglemaps",
+          "iosamap"
+        ]
+      }
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/logo.png",
         "backgroundColor": "#ffffff"
       },
-      "edgeToEdgeEnabled": true
+      "edgeToEdgeEnabled": true,
+      "package": "com.capico.LogeEtudiant",
+      "permissions": [
+        "INTERNET",
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_COARSE_LOCATION"
+      ]
     },
     "web": {
       "favicon": "./assets/logo.png"
@@ -28,6 +43,11 @@
     "plugins": [
       "expo-status-bar",
       "expo-video"
-    ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "a2e4b902-d4ed-4b0c-8cf9-5a1bd73e68b6"
+      }
+    }
   }
 }

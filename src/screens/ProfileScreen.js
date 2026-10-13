@@ -14,6 +14,7 @@ export default function ProfileScreen({ navigation }) {
   const [role, setRole] = useState('');
 
   // Charger les informations du profil depuis Firestore
+  // Charger les informations du profil depuis Firestore
   useEffect(() => {
     const fetchUserData = async () => {
       try {
@@ -27,7 +28,18 @@ export default function ProfileScreen({ navigation }) {
 
         if (userDoc.exists()) {
           const data = userDoc.data();
-          setNom(data.nom || '');
+          
+          // Si le prénom et le nom sont séparés dans Firestore, on les combine
+          let fullName = data.nom || '';
+          if (data.prenom) {
+            fullName = `${data.prenom} ${data.nom}`.trim();
+          }
+          // S'il y a un champ nomComplet direct, on le prend en priorité
+          if (data.nomComplet) {
+            fullName = data.nomComplet;
+          }
+
+          setNom(fullName);
           setTelephone(data.telephone || '');
           setUniversite(data.universite || '');
           setRole(data.role || 'Etudiant');
@@ -40,7 +52,6 @@ export default function ProfileScreen({ navigation }) {
 
     fetchUserData();
   }, []);
-
   // Mettre à jour le profil
   const handleUpdateProfile = async () => {
     try {
@@ -51,6 +62,7 @@ export default function ProfileScreen({ navigation }) {
       const userDocRef = doc(db, "users", user.uid);
       await updateDoc(userDocRef, {
         nom: nom.trim(),
+        nomComplet: nom.trim(), // Enregistre aussi sous nomComplet pour éviter les désynchronisations
         telephone: telephone.trim(),
         universite: universite.trim(),
       });
