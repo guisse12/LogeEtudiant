@@ -116,6 +116,43 @@ export default function PropertyDetailsScreen({ route, navigation }) {
     }
   };
 
+  // Fonction pour signaler une annonce suspecte ou une arnaque
+  const handleReportProperty = () => {
+    Alert.alert(
+      "Signaler l'annonce",
+      "Voulez-vous signaler ce logement comme étant une arnaque ou une fausse annonce auprès de l'administration ?",
+      [
+        { text: "Annuler", style: "cancel" },
+        {
+          text: "Signaler",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              if (!auth.currentUser) {
+                Alert.alert("Erreur", "Vous devez être connecté pour signaler une annonce.");
+                return;
+              }
+
+              await addDoc(collection(db, "reports"), {
+                propertyId: property.id,
+                propertyTitle: property.titre || "Logement sans titre",
+                userId: auth.currentUser.uid,
+                userEmail: auth.currentUser.email || "Étudiant",
+                raison: "Annonce suspecte / Fraude potentielle signalée par un étudiant",
+                createdAt: serverTimestamp(),
+              });
+
+              Alert.alert("Signalé", "Le signalement a bien été transmis à l'administrateur.");
+            } catch (error) {
+              console.error("Erreur signalement :", error);
+              Alert.alert("Erreur", "Impossible d'envoyer le signalement.");
+            }
+          }
+        }
+      ]
+    );
+  };
+
   const averageRating = reviews.length > 0 
     ? (reviews.reduce((acc, curr) => acc + (curr.rating || 0), 0) / reviews.length).toFixed(1) 
     : 'N/A';
@@ -356,6 +393,14 @@ export default function PropertyDetailsScreen({ route, navigation }) {
       >
         <Text style={styles.contactButtonText}>📞 Contacter par WhatsApp / Téléphone</Text>
       </TouchableOpacity>
+
+      {/* Bouton de signalement d'arnaque */}
+      <TouchableOpacity 
+        style={styles.reportButton}
+        onPress={handleReportProperty}
+      >
+        <Text style={styles.reportButtonText}>🚨 Signaler cette annonce (Arnaque)</Text>
+      </TouchableOpacity>
     </ScrollView>
   );
 }
@@ -400,6 +445,8 @@ const styles = StyleSheet.create({
   reviewUser: { fontWeight: 'bold', fontSize: 13, color: '#2D3748' },
   reviewRating: { fontSize: 12, fontWeight: 'bold', color: '#D69E2E' },
   reviewComment: { fontSize: 13, color: '#4A5568' },
-  contactButton: { backgroundColor: '#38A169', padding: 15, borderRadius: 10, alignItems: 'center', marginTop: 5, marginBottom: 30 },
+  contactButton: { backgroundColor: '#38A169', padding: 15, borderRadius: 10, alignItems: 'center', marginTop: 5, marginBottom: 10 },
   contactButtonText: { color: '#fff', fontSize: 15, fontWeight: 'bold' },
+  reportButton: { backgroundColor: '#FFF5F5', borderWidth: 1, borderColor: '#FEB7B7', padding: 12, borderRadius: 10, alignItems: 'center', marginBottom: 30 },
+  reportButtonText: { color: '#E53E3E', fontSize: 14, fontWeight: 'bold' },
 });

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { StyleSheet, Text, View, TouchableOpacity, ScrollView, ActivityIndicator, Image, Alert, TextInput, Modal } from 'react-native';
-import { collection, getDocs, query, where, doc, deleteDoc, updateDoc, addDoc } from 'firebase/firestore';
+import { collection, getDocs, query, where, doc, deleteDoc, updateDoc, addDoc, getDoc } from 'firebase/firestore';
 import * as ImagePicker from 'expo-image-picker';
 import * as Location from 'expo-location';
 import MapView, { Marker } from 'react-native-maps';
@@ -22,6 +22,9 @@ export default function BailleurHomeScreen({ navigation }) {
   const [modalVisible, setModalVisible] = useState(false);
   const [editingBien, setEditingBien] = useState(null);
   const [selectedFilterZone, setSelectedFilterZone] = useState('TOUS');
+  
+  // État pour la validation du compte bailleur
+  const [statutValidation, setStatutValidation] = useState('en_attente');
 
   // Formulaire state
   const [titre, setTitre] = useState('');
@@ -41,6 +44,16 @@ export default function BailleurHomeScreen({ navigation }) {
     setLoading(true);
     try {
       if (!auth.currentUser) return;
+      
+      // 1. Vérifier le statut de validation du bailleur dans Firestore
+      const userDocRef = doc(db, "users", auth.currentUser.uid);
+      const userSnap = await getDoc(userDocRef);
+      if (userSnap.exists()) {
+        const userData = userSnap.data();
+        setStatutValidation(userData.statutValidation || 'en_attente');
+      }
+
+      // 2. Charger ses biens
       const q = query(collection(db, "properties"), where("proprietaireId", "==", auth.currentUser.uid));
       const querySnapshot = await getDocs(q);
       let list = [];
@@ -116,6 +129,15 @@ export default function BailleurHomeScreen({ navigation }) {
   };
 
   const handleOpenModal = (bien = null) => {
+    // Bloquer l'ouverture du formulaire si le compte bailleur n'est pas validé
+    if (statutValidation !== 'valide' && !bien) {
+      Alert.alert(
+        "Compte en attente",
+        "Votre compte bailleur n'a pas encore été validé par l'administrateur. Vous ne pouvez pas publier de nouveau logement."
+      );
+      return;
+    }
+
     if (bien) {
       setEditingBien(bien);
       setTitre(bien.titre || '');
@@ -290,7 +312,20 @@ export default function BailleurHomeScreen({ navigation }) {
           </View>
         </View>
 
-        <TouchableOpacity style={styles.addButton} onPress={() => handleOpenModal()}>
+        {/* Bannière d'avertissement si le compte est en attente de validation */}
+        {statutValidation !== 'valide' && (
+          <View style={styles.warningBanner}>
+            <Text style={styles.warningTitle}>⚠️ Compte en attente de validation</Text>
+            <Text style={styles.warningText}>
+              Votre compte bailleur n'a pas encore été validé par l'administrateur. La publication de nouveaux logements est temporairement restreinte.
+            </Text>
+          </View>
+        )}
+
+        <TouchableOpacity 
+          style={[styles.addButton, statutValidation !== 'valide' && { backgroundColor: '#CBD5E0' }]} 
+          onPress={() => handleOpenModal()}
+        >
           <Text style={styles.addButtonText}>➕ Publier un nouveau logement</Text>
         </TouchableOpacity>
 
@@ -445,6 +480,9 @@ const styles = StyleSheet.create({
   msgButtonText: { color: '#2D3748', fontWeight: 'bold', fontSize: 12 },
   logoutButton: { padding: 6 },
   logoutText: { color: '#E53E3E', fontWeight: 'bold', fontSize: 12 },
+  warningBanner: { backgroundColor: '#FEFCBF', borderWidth: 1, borderColor: '#ECC94B', padding: 12, borderRadius: 8, marginBottom: 15 },
+  warningTitle: { fontSize: 13, fontWeight: 'bold', color: '#744210', marginBottom: 2 },
+  warningText: { fontSize: 12, color: '#975A16', lineHeight: 16 },
   addButton: { backgroundColor: '#38A169', padding: 14, borderRadius: 8, alignItems: 'center', marginBottom: 15 },
   addButtonText: { color: '#fff', fontWeight: 'bold', fontSize: 15 },
   filterSection: { marginBottom: 15 },

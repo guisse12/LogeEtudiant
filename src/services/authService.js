@@ -1,4 +1,4 @@
-import { createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, sendPasswordResetEmail } from "firebase/auth";
+import { createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, sendPasswordResetEmail, sendEmailVerification } from "firebase/auth";
 import { doc, setDoc, getDoc } from "firebase/firestore";
 import { auth, db } from "../config/firebase";
 
@@ -9,18 +9,28 @@ export const registerUser = async (email, password, userData) => {
     const userCredential = await createUserWithEmailAndPassword(auth, email, password);
     const user = userCredential.user;
 
-    // 2. Enregistrement des données additionnelles dans Firestore (collection users)
+    // 2. Envoi du lien de confirmation par e-mail
+    await sendEmailVerification(user);
+
+    // 3. Enregistrement des données additionnelles dans Firestore (collection users)
     await setDoc(doc(db, "users", user.uid), {
       uid: user.uid,
       email: email,
       nom: userData.nom,
       prenom: userData.prenom,
       telephone: userData.telephone,
-      role: userData.role, // "etudiant" ou "bailleur"
+      role: userData.role, // "etudiant", "bailleur" ou "admin"
       dateCreation: new Date()
     });
 
-    return { success: true, user };
+    // 4. Déconnexion immédiate pour bloquer l'accès tant que l'e-mail n'est pas vérifié
+    await signOut(auth);
+
+    return { 
+      success: true, 
+      user, 
+      message: "Compte créé avec succès. Veuillez consulter vos e-mails pour valider votre compte avant de vous connecter." 
+    };
   } catch (error) {
     let errorMessage = "Une erreur est survenue lors de l'inscription.";
 
@@ -42,6 +52,16 @@ export const loginUser = async (email, password) => {
   try {
     const userCredential = await signInWithEmailAndPassword(auth, email, password);
     const user = userCredential.user;
+
+    // Vérification si l'e-mail a été confirmé par lien
+    if (!user.emailVerified) {
+      // Déconnexion immédiate pour empêcher l'accès non vérifié
+      await signOut(auth);
+      return { 
+        success: false, 
+        error: "Veuillez confirmer votre compte via le lien envoyé par e-mail avant de vous connecter." 
+      };
+    }
 
     // Récupérer le rôle depuis Firestore pour orienter l'utilisateur après
     const userDoc = await getDoc(doc(db, "users", user.uid));

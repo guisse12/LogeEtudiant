@@ -2,12 +2,15 @@ import React, { useState } from 'react';
 import { StyleSheet, Text, TextInput, TouchableOpacity, View, Alert, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { loginUser, resetPassword } from '../services/authService';
+import { sendEmailVerification } from 'firebase/auth';
+import { auth } from '../config/firebase';
 
 export default function LoginScreen({ navigation }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [unverifiedUser, setUnverifiedUser] = useState(null); // Stocke l'utilisateur non vérifié pour le renvoi
 
   const handleLogin = async () => {
     if (!email || !password) {
@@ -16,23 +19,42 @@ export default function LoginScreen({ navigation }) {
     }
 
     setLoading(true);
+    setUnverifiedUser(null);
     try {
       const result = await loginUser(email, password);
 
       if (result.success) {
         const role = result.userInfo?.role;
-        if (role === 'bailleur') {
+        
+        // Redirection selon le rôle récupéré depuis Firestore
+        if (role === 'admin') {
+          navigation.replace('AdminHome');
+        } else if (role === 'bailleur') {
           navigation.replace('BailleurHome');
         } else {
           navigation.replace('EtudiantHome');
         }
       } else {
+        // Si l'erreur concerne le compte non vérifié, on garde l'instance sous le coude pour proposer le renvoi
+        if (auth.currentUser && !auth.currentUser.emailVerified) {
+          setUnverifiedUser(auth.currentUser);
+        }
         Alert.alert('Erreur de connexion', result.error);
       }
     } catch (error) {
       Alert.alert('Erreur', 'Une erreur technique est survenue.');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleResendVerification = async () => {
+    if (!unverifiedUser) return;
+    try {
+      await sendEmailVerification(unverifiedUser);
+      Alert.alert('Succès', 'Un nouvel e-mail de confirmation vient de vous être envoyé.');
+    } catch (error) {
+      Alert.alert('Erreur', 'Impossible de renvoyer l\'e-mail pour le moment. Réessayez plus tard.');
     }
   };
 
@@ -98,6 +120,13 @@ export default function LoginScreen({ navigation }) {
           <Text style={styles.buttonText}>Se connecter</Text>
         )}
       </TouchableOpacity>
+
+      {/* Bouton conditionnel si l'utilisateur n'a pas validé son e-mail */}
+      {unverifiedUser && (
+        <TouchableOpacity style={styles.resendButton} onPress={handleResendVerification}>
+          <Text style={styles.resendButtonText}>Renvoyer l'e-mail de confirmation</Text>
+        </TouchableOpacity>
+      )}
       
       {/* Lien Inscription sur la même ligne */}
       <View style={{ alignItems: 'center', marginTop: 20 }}>
@@ -147,7 +176,7 @@ const styles = StyleSheet.create({
   inputContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 0, // Remet à zéro pour laisser le TextInput interne gérer l'espace
+    padding: 0,
   },
   passwordInput: {
     flex: 1,
@@ -176,6 +205,18 @@ const styles = StyleSheet.create({
   buttonText: {
     color: '#fff',
     fontSize: 16,
+    fontWeight: 'bold',
+  },
+  resendButton: {
+    backgroundColor: '#ED8936',
+    padding: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+    marginTop: 10,
+  },
+  resendButtonText: {
+    color: '#fff',
+    fontSize: 14,
     fontWeight: 'bold',
   },
   linkText: {

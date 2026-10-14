@@ -14,7 +14,6 @@ export default function ProfileScreen({ navigation }) {
   const [role, setRole] = useState('');
 
   // Charger les informations du profil depuis Firestore
-  // Charger les informations du profil depuis Firestore
   useEffect(() => {
     const fetchUserData = async () => {
       try {
@@ -29,15 +28,30 @@ export default function ProfileScreen({ navigation }) {
         if (userDoc.exists()) {
           const data = userDoc.data();
           
-          // Si le prénom et le nom sont séparés dans Firestore, on les combine
-          let fullName = data.nom || '';
-          if (data.prenom) {
-            fullName = `${data.prenom} ${data.nom}`.trim();
-          }
-          // S'il y a un champ nomComplet direct, on le prend en priorité
+          let fullName = '';
+
+          // 1. Priorité au champ nomComplet s'il existe
           if (data.nomComplet) {
             fullName = data.nomComplet;
+          } 
+          // 2. Sinon, on combine prenom et nom sans répéter le prénom si data.nom contient déjà le prénom
+          else if (data.prenom && data.nom) {
+            const prenomClean = data.prenom.trim();
+            const nomClean = data.nom.trim();
+
+            if (nomClean.toLowerCase().startsWith(prenomClean.toLowerCase())) {
+              fullName = nomClean;
+            } else {
+              fullName = `${prenomClean} ${nomClean}`;
+            }
+          } 
+          // 3. Sinon, on prend juste nom ou prenom
+          else {
+            fullName = data.nom || data.prenom || '';
           }
+
+          // Nettoyage final des espaces multiples
+          fullName = fullName.trim().replace(/\s+/g, ' ');
 
           setNom(fullName);
           setTelephone(data.telephone || '');
@@ -52,6 +66,7 @@ export default function ProfileScreen({ navigation }) {
 
     fetchUserData();
   }, []);
+
   // Mettre à jour le profil
   const handleUpdateProfile = async () => {
     try {
@@ -59,10 +74,12 @@ export default function ProfileScreen({ navigation }) {
       const user = auth.currentUser;
       if (!user) return;
 
+      const cleanName = nom.trim().replace(/\s+/g, ' ');
+
       const userDocRef = doc(db, "users", user.uid);
       await updateDoc(userDocRef, {
-        nom: nom.trim(),
-        nomComplet: nom.trim(), // Enregistre aussi sous nomComplet pour éviter les désynchronisations
+        nom: cleanName,
+        nomComplet: cleanName, // Harmonise le nom complet pour éviter tout décalage
         telephone: telephone.trim(),
         universite: universite.trim(),
       });
@@ -114,7 +131,7 @@ export default function ProfileScreen({ navigation }) {
         <Text style={styles.label}>Nom complet</Text>
         <TextInput 
           style={styles.input} 
-          placeholder="Votre nom" 
+          placeholder="Votre nom complet" 
           value={nom} 
           onChangeText={setNom} 
         />
