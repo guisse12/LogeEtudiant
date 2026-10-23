@@ -1,11 +1,10 @@
-// Import the functions you need from the SDKs you need
-import { initializeApp } from "firebase/app";
-import { initializeAuth, getReactNativePersistence } from "firebase/auth";
+import { initializeApp, getApps, getApp } from "firebase/app";
+import { initializeAuth, getReactNativePersistence, getAuth } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
 import { getStorage } from "firebase/storage";
 import ReactNativeAsyncStorage from '@react-native-async-storage/async-storage';
 
-// Your web app's Firebase configuration
+// Configuration Firebase de votre projet LogeEtudiant
 const firebaseConfig = {
   apiKey: "AIzaSyCwqZASk4uvCZCZidBLL3sobSEQkBxjLBo",
   authDomain: "logeetudiant-3867e.firebaseapp.com",
@@ -16,15 +15,20 @@ const firebaseConfig = {
   appId: "1:729723154725:web:268de33c6676c4bd022acc"
 };
 
-// Initialize Firebase
-const app = initializeApp(firebaseConfig);
+// 1. Initialisation sécurisée (évite le crash "duplicate-app" lors des rechargements)
+const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
 
-// Initialize Auth with AsyncStorage persistence for React Native
-const auth = initializeAuth(app, {
-  persistence: getReactNativePersistence(ReactNativeAsyncStorage)
-});
+// 2. Initialisation sécurisée de l'Auth avec persistance AsyncStorage (évite le crash "already-initialized")
+let auth;
+try {
+  auth = initializeAuth(app, {
+    persistence: getReactNativePersistence(ReactNativeAsyncStorage)
+  });
+} catch (error) {
+  auth = getAuth(app);
+}
 
 const db = getFirestore(app);
 const storage = getStorage(app);
 
-export { auth, db, storage };
+export { app, auth, db, storage };

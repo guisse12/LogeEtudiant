@@ -48,14 +48,22 @@ export default function FavorisScreen({ navigation }) {
       Alert.alert("Information", "Numéro de téléphone non disponible.");
       return;
     }
-    const message = `Bonjour, je suis intéressé(e) par votre logement "${titre}" vu dans mes favoris sur LogeÉtudiant.`;
-    const url = `whatsapp://send?phone=${telephone}&text=${encodeURIComponent(message)}`;
-    Linking.canOpenURL(url).then((supported) => {
-      if (!supported) {
-        Linking.openURL(`tel:${telephone}`);
-      } else {
-        Linking.openURL(url);
-      }
+
+    let cleanPhone = String(telephone).replace(/[^0-9]/g, '');
+    if (cleanPhone.startsWith('00221')) {
+      cleanPhone = cleanPhone.substring(2);
+    } else if (cleanPhone.startsWith('221')) {
+      // Déjà avec l'indicatif 221
+    } else if (cleanPhone.length === 9) {
+      cleanPhone = `221${cleanPhone}`;
+    }
+
+    const message = `Bonjour, je suis intéressé(e) par votre logement "${titre || 'étudiant'}" vu dans mes favoris sur LogeÉtudiant.`;
+    const url = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(message)}`;
+
+    Linking.openURL(url).catch((err) => {
+      console.error("Erreur ouverture WhatsApp :", err);
+      Linking.openURL(`tel:${cleanPhone}`);
     });
   };
 
@@ -83,9 +91,14 @@ export default function FavorisScreen({ navigation }) {
               style={styles.card}
               onPress={() => navigation.navigate('PropertyDetails', { property: item })}
             >
-              {item.images && item.images.length > 0 && (
-                <Image source={{ uri: item.images[0] }} style={styles.image} />
-              )}
+              <Image 
+                source={{ 
+                  uri: (item.images && item.images.length > 0 && item.images[0]) || 
+                       item.image || 
+                       'https://images.unsplash.com/photo-1555854877-bab0e564b8d5?auto=format&fit=crop&w=600&q=80' 
+                }} 
+                style={styles.image} 
+              />
               <TouchableOpacity 
                 style={styles.removeBtn} 
                 onPress={() => removeFavorite(item.id)}

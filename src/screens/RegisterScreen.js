@@ -4,6 +4,7 @@ import { createUserWithEmailAndPassword } from 'firebase/auth';
 import { doc, setDoc } from 'firebase/firestore';
 import * as ImagePicker from 'expo-image-picker';
 import { auth, db } from '../config/firebase';
+import { cleanRegistrationNames } from '../utils/nameFormatter';
 
 export default function RegisterScreen({ navigation }) {
   const [email, setEmail] = useState('');
@@ -99,15 +100,15 @@ export default function RegisterScreen({ navigation }) {
   };
 
   const handleRegister = async () => {
-    const cleanPrenom = prenom.trim().replace(/\s+/g, ' ');
-    const cleanNom = nom.trim().replace(/\s+/g, ' ');
     const cleanEmail = email.trim();
     const cleanPhone = telephone.trim();
 
-    if (!cleanEmail || !password || !cleanNom || !cleanPrenom || !cleanPhone) {
+    if (!cleanEmail || !password || !nom.trim() || !prenom.trim() || !cleanPhone) {
       Alert.alert("Erreur", "Veuillez remplir tous les champs obligatoires.");
       return;
     }
+
+    const { prenom: finalPrenom, nom: finalNom, nomComplet: finalNomComplet } = cleanRegistrationNames(prenom, nom);
 
     if (role === 'bailleur' && justificatifsUris.length === 0) {
       Alert.alert(
@@ -123,13 +124,13 @@ export default function RegisterScreen({ navigation }) {
       const userCredential = await createUserWithEmailAndPassword(auth, cleanEmail, password);
       const user = userCredential.user;
 
-      // 2. Enregistrement dans Firestore
+      // 2. Enregistrement dans Firestore avec noms nettoyés
       await setDoc(doc(db, "users", user.uid), {
         uid: user.uid,
         email: cleanEmail,
-        nom: cleanNom,
-        prenom: cleanPrenom,
-        nomComplet: `${cleanPrenom} ${cleanNom}`,
+        nom: finalNom,
+        prenom: finalPrenom,
+        nomComplet: finalNomComplet,
         telephone: cleanPhone,
         role: role,
         statutValidation: role === 'bailleur' ? 'en_attente' : 'valide',
@@ -182,19 +183,22 @@ export default function RegisterScreen({ navigation }) {
 
       <TextInput 
         style={styles.input} 
-        placeholder="Prénom (ex: Abou)" 
+        placeholder="Prénom" 
+        placeholderTextColor="#A0AEC0"
         value={prenom} 
         onChangeText={setPrenom} 
       />
       <TextInput 
         style={styles.input} 
-        placeholder="Nom (ex: GUISSE)" 
+        placeholder="Nom" 
+        placeholderTextColor="#A0AEC0"
         value={nom} 
         onChangeText={setNom} 
       />
       <TextInput 
         style={styles.input} 
         placeholder="Numéro de téléphone" 
+        placeholderTextColor="#A0AEC0"
         value={telephone} 
         onChangeText={setTelephone} 
         keyboardType="phone-pad" 
@@ -202,6 +206,7 @@ export default function RegisterScreen({ navigation }) {
       <TextInput 
         style={styles.input} 
         placeholder="Adresse email" 
+        placeholderTextColor="#A0AEC0"
         value={email} 
         onChangeText={setEmail} 
         keyboardType="email-address" 
@@ -210,6 +215,7 @@ export default function RegisterScreen({ navigation }) {
       <TextInput 
         style={styles.input} 
         placeholder="Mot de passe" 
+        placeholderTextColor="#A0AEC0"
         value={password} 
         onChangeText={setPassword} 
         secureTextEntry 
@@ -268,7 +274,7 @@ const styles = StyleSheet.create({
   roleActive: { backgroundColor: '#3182CE' },
   roleText: { color: '#4A5568', fontWeight: 'bold', fontSize: 14 },
   roleTextActive: { color: '#fff' },
-  input: { backgroundColor: '#fff', borderWidth: 1, borderColor: '#CBD5E0', padding: 12, borderRadius: 8, marginBottom: 12, fontSize: 14 },
+  input: { backgroundColor: '#fff', borderWidth: 1, borderColor: '#CBD5E0', padding: 12, borderRadius: 8, marginBottom: 12, fontSize: 14, color: '#2D3748' },
   bailleurSection: { backgroundColor: '#EBF8FF', borderWidth: 1, borderColor: '#BEE3F8', padding: 15, borderRadius: 8, marginBottom: 15 },
   bailleurSectionTitle: { fontSize: 15, fontWeight: 'bold', color: '#2B6CB0', marginBottom: 5 },
   bailleurDesc: { fontSize: 12, color: '#4A5568', marginBottom: 10, lineHeight: 18 },

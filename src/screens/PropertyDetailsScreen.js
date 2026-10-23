@@ -18,6 +18,26 @@ import { db, auth } from '../config/firebase';
 
 const { width } = Dimensions.get('window');
 
+const DEFAULT_PROPERTY_IMAGE = 'https://images.unsplash.com/photo-1555854877-bab0e564b8d5?auto=format&fit=crop&w=600&q=80';
+
+const PropertyDetailImage = ({ uri }) => {
+  const [imgSrc, setImgSrc] = useState(() => {
+    if (uri && typeof uri === 'string' && (uri.startsWith('http://') || uri.startsWith('https://'))) {
+      return uri;
+    }
+    return DEFAULT_PROPERTY_IMAGE;
+  });
+
+  return (
+    <Image 
+      source={{ uri: imgSrc }} 
+      style={styles.propertyImage} 
+      onError={() => setImgSrc(DEFAULT_PROPERTY_IMAGE)}
+      resizeMode="cover"
+    />
+  );
+};
+
 export default function PropertyDetailsScreen({ route, navigation }) {
   const { property } = route.params;
 
@@ -163,18 +183,22 @@ export default function PropertyDetailsScreen({ route, navigation }) {
       return;
     }
 
-    const message = `Bonjour, je suis intéressé(e) par votre logement "${titreBien}" vu sur LogeÉtudiant. Est-il toujours disponible ?`;
-    const url = `whatsapp://send?phone=${telephone}&text=${encodeURIComponent(message)}`;
+    let cleanPhone = String(telephone).replace(/[^0-9]/g, '');
+    if (cleanPhone.startsWith('00221')) {
+      cleanPhone = cleanPhone.substring(2);
+    } else if (cleanPhone.startsWith('221')) {
+      // Déjà avec 221
+    } else if (cleanPhone.length === 9) {
+      cleanPhone = `221${cleanPhone}`;
+    }
 
-    Linking.canOpenURL(url)
-      .then((supported) => {
-        if (!supported) {
-          return Linking.openURL(`tel:${telephone}`);
-        } else {
-          return Linking.openURL(url);
-        }
-      })
-      .catch((err) => console.error("Erreur lors de l'ouverture du lien de contact :", err));
+    const message = `Bonjour, je suis intéressé(e) par votre logement "${titreBien || 'étudiant'}" vu sur LogeÉtudiant. Est-il toujours disponible ?`;
+    const whatsappUrl = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(message)}`;
+
+    Linking.openURL(whatsappUrl).catch((err) => {
+      console.error("Erreur lors de l'ouverture de WhatsApp :", err);
+      Linking.openURL(`tel:${cleanPhone}`);
+    });
   };
 
   const handleDemarrerConversation = async () => {
@@ -289,20 +313,22 @@ export default function PropertyDetailsScreen({ route, navigation }) {
             } else {
               return (
                 <View key={index} style={styles.mediaContainer}>
-                  <Image source={{ uri: mediaUri }} style={styles.propertyImage} />
+                  <PropertyDetailImage uri={mediaUri} />
                 </View>
               );
             }
           })}
         </ScrollView>
       ) : (
-        <Image 
-          source={{ uri: 'https://images.unsplash.com/photo-1555854877-bab0e564b8d5?auto=format&fit=crop&w=600&q=80' }} 
-          style={styles.propertyImage} 
-        />
+        <PropertyDetailImage uri={property.image} />
       )}
 
       <View style={styles.badgeContainer}>
+        {property.localisation?.ville ? (
+          <View style={[styles.propertyBadge, { backgroundColor: '#319795' }]}>
+            <Text style={styles.propertyBadgeText}>🏙️ {property.localisation.ville}</Text>
+          </View>
+        ) : null}
         <View style={styles.propertyBadge}>
           <Text style={styles.propertyBadgeText}>{property.universiteId || "Campus"}</Text>
         </View>
@@ -328,7 +354,9 @@ export default function PropertyDetailsScreen({ route, navigation }) {
 
       <View style={styles.sectionCard}>
         <Text style={styles.sectionTitle}>Localisation</Text>
-        <Text style={styles.addressText}>📍 {property.localisation?.adresse || "Adresse non spécifiée"}</Text>
+        <Text style={styles.addressText}>
+          📍 {property.localisation?.ville ? `${property.localisation.ville} • ` : ''}{property.localisation?.adresse || "Adresse non spécifiée"}
+        </Text>
         
         <TouchableOpacity 
           style={styles.mapContainer}
@@ -353,6 +381,7 @@ export default function PropertyDetailsScreen({ route, navigation }) {
             <TextInput 
               style={styles.ratingInput} 
               placeholder="Note (1-5)" 
+              placeholderTextColor="#A0AEC0"
               keyboardType="numeric"
               value={newRating} 
               onChangeText={setNewRating} 
@@ -361,6 +390,7 @@ export default function PropertyDetailsScreen({ route, navigation }) {
             <TextInput 
               style={styles.commentInput} 
               placeholder="Qu'avez-vous pensé de ce logement ?" 
+              placeholderTextColor="#A0AEC0"
               value={newComment} 
               onChangeText={setNewComment} 
             />
@@ -435,8 +465,8 @@ const styles = StyleSheet.create({
   reviewForm: { marginBottom: 15, paddingBottom: 15, borderBottomWidth: 1, borderBottomColor: '#EDF2F7' },
   subLabel: { fontSize: 13, fontWeight: '600', color: '#4A5568', marginBottom: 6 },
   reviewInputRow: { flexDirection: 'row', marginBottom: 8 },
-  ratingInput: { width: 70, backgroundColor: '#F7FAFC', borderWidth: 1, borderColor: '#CBD5E0', padding: 8, borderRadius: 6, marginRight: 8, textAlign: 'center', fontSize: 14 },
-  commentInput: { flex: 1, backgroundColor: '#F7FAFC', borderWidth: 1, borderColor: '#CBD5E0', padding: 8, borderRadius: 6, fontSize: 14 },
+  ratingInput: { width: 70, backgroundColor: '#F7FAFC', borderWidth: 1, borderColor: '#CBD5E0', padding: 8, borderRadius: 6, marginRight: 8, textAlign: 'center', fontSize: 14, color: '#2D3748' },
+  commentInput: { flex: 1, backgroundColor: '#F7FAFC', borderWidth: 1, borderColor: '#CBD5E0', padding: 8, borderRadius: 6, fontSize: 14, color: '#2D3748' },
   submitReviewBtn: { backgroundColor: '#3182CE', padding: 8, borderRadius: 6, alignItems: 'center' },
   submitReviewText: { color: '#fff', fontWeight: 'bold', fontSize: 13 },
   noReviewsText: { color: '#718096', fontSize: 13, fontStyle: 'italic', textAlign: 'center', marginVertical: 10 },

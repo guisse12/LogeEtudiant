@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import { StyleSheet, Text, View, TouchableOpacity, ScrollView, ActivityIndicator, Image, Linking, Alert, TextInput } from 'react-native';
-import MapView, { Marker } from 'react-native-maps';
 import { collection, getDocs, query, where, doc, setDoc, deleteDoc } from 'firebase/firestore';
 import { db, auth } from '../config/firebase';
 import { logoutUser } from '../services/authService';
@@ -14,7 +13,40 @@ const UNIVERSITES = [
   { id: 'UASZ', nom: 'UASZ (Ziguinchor)' },
   { id: 'UIDT', nom: 'UIDT (Thiès)' },
   { id: 'UAM', nom: 'UAM (Diamniadio)' },
+  { id: 'URDFS', nom: 'URDFS (Dakar-Plateau)' },
+  { id: 'USO', nom: 'USO (Tambacounda)' },
+  { id: 'ISM', nom: 'ISM (Dakar)' },
+  { id: 'IAM', nom: 'IAM (Dakar)' },
+  { id: 'SupDeCo', nom: 'SupDeCo (Dakar)' },
+  { id: 'ESMT', nom: 'ESMT (Dakar)' },
+  { id: 'CESAG', nom: 'CESAG (Thiès)' },
+  { id: 'UCAO', nom: 'UCAO (Thiès)' },
+  { id: 'DIT', nom: 'DIT (Dakar)' },
+  { id: 'AFI-UE', nom: 'AFI-UE (Dakar)' },
+  { id: 'ESEBAT ', nom: 'ESEBAT  (Dakar)' },
+  { id: 'CEFAS', nom: 'CEFAS (Dakar)' },
+
 ];
+
+const DEFAULT_PROPERTY_IMAGE = 'https://images.unsplash.com/photo-1555854877-bab0e564b8d5?auto=format&fit=crop&w=600&q=80';
+
+const PropertyImageItem = ({ uri }) => {
+  const [imageUri, setImageUri] = useState(() => {
+    if (uri && typeof uri === 'string' && (uri.startsWith('http://') || uri.startsWith('https://'))) {
+      return uri;
+    }
+    return DEFAULT_PROPERTY_IMAGE;
+  });
+
+  return (
+    <Image 
+      source={{ uri: imageUri }} 
+      style={styles.propertyImage} 
+      onError={() => setImageUri(DEFAULT_PROPERTY_IMAGE)}
+      resizeMode="cover"
+    />
+  );
+};
 
 export default function EtudiantHomeScreen({ navigation }) {
   const [biens, setBiens] = useState([]);
@@ -74,6 +106,7 @@ export default function EtudiantHomeScreen({ navigation }) {
       item.titre?.toLowerCase().includes(searchQuery.toLowerCase()) ||
       item.description?.toLowerCase().includes(searchQuery.toLowerCase()) ||
       item.localisation?.adresse?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      item.localisation?.ville?.toLowerCase().includes(searchQuery.toLowerCase()) ||
       item.type?.toLowerCase().includes(searchQuery.toLowerCase());
 
     const matchesPrice = maxPrice === '' || Number(item.prix) <= Number(maxPrice);
@@ -114,22 +147,26 @@ export default function EtudiantHomeScreen({ navigation }) {
 
   const handleContactPropriétaire = (telephone, titreBien) => {
     if (!telephone) {
-      alert("Le numéro de téléphone du propriétaire n'est pas disponible pour ce bien.");
+      Alert.alert("Information", "Le numéro de téléphone du propriétaire n'est pas disponible pour ce bien.");
       return;
     }
 
-    const message = `Bonjour, je suis intéressé(e) par votre logement "${titreBien}" vu sur LogeÉtudiant. Est-il toujours disponible ?`;
-    const url = `whatsapp://send?phone=${telephone}&text=${encodeURIComponent(message)}`;
+    let cleanPhone = String(telephone).replace(/[^0-9]/g, '');
+    if (cleanPhone.startsWith('00221')) {
+      cleanPhone = cleanPhone.substring(2);
+    } else if (cleanPhone.startsWith('221')) {
+      // Déjà avec l'indicatif 221
+    } else if (cleanPhone.length === 9) {
+      cleanPhone = `221${cleanPhone}`;
+    }
 
-    Linking.canOpenURL(url)
-      .then((supported) => {
-        if (!supported) {
-          return Linking.openURL(`tel:${telephone}`);
-        } else {
-          return Linking.openURL(url);
-        }
-      })
-      .catch((err) => console.error("Erreur lors de l'ouverture du lien de contact :", err));
+    const message = `Bonjour, je suis intéressé(e) par votre logement "${titreBien || 'étudiant'}" vu sur LogeÉtudiant. Est-il toujours disponible ?`;
+    const whatsappUrl = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(message)}`;
+
+    Linking.openURL(whatsappUrl).catch((err) => {
+      console.error("Erreur lors de l'ouverture de WhatsApp :", err);
+      Linking.openURL(`tel:${cleanPhone}`);
+    });
   };
 
   return (
@@ -171,7 +208,7 @@ export default function EtudiantHomeScreen({ navigation }) {
       <View style={styles.searchSection}>
         <TextInput 
           style={styles.searchInput}
-          placeholder="🔍 Rechercher (ex: Studio, Dakar...)"
+          placeholder="🔍 Rechercher (ex: Thiès, Studio, Dakar...)"
           placeholderTextColor="#A0AEC0"
           value={searchQuery}
           onChangeText={setSearchQuery}
@@ -218,6 +255,8 @@ export default function EtudiantHomeScreen({ navigation }) {
       ) : (
         filteredBiens.map((item) => {
           const isFavorite = favorisIds.includes(item.id);
+          const itemPhoto = (item.images && item.images.length > 0 && item.images[0]) || item.image || (item.medias && item.medias.length > 0 && item.medias[0]);
+
           return (
             <TouchableOpacity 
               key={item.id} 
@@ -225,9 +264,7 @@ export default function EtudiantHomeScreen({ navigation }) {
               onPress={() => navigation.navigate('PropertyDetails', { property: item })}
               activeOpacity={0.9}
             >
-              {item.images && item.images.length > 0 && (
-                <Image source={{ uri: item.images[0] }} style={styles.propertyImage} />
-              )}
+              <PropertyImageItem uri={itemPhoto} />
 
               <View style={styles.propertyBadge}>
                 <Text style={styles.propertyBadgeText}>{item.universiteId}</Text>
@@ -247,29 +284,27 @@ export default function EtudiantHomeScreen({ navigation }) {
               <Text style={styles.propertyType}>{item.type} - Proche campus</Text>
               <Text style={styles.propertyDescription} numberOfLines={2}>{item.description}</Text>
               
-              <View style={styles.mapContainer}>
-                <MapView 
-                  style={styles.map}
-                  initialRegion={{
-                    latitude: item.localisation?.latitude || 14.69275,
-                    longitude: item.localisation?.longitude || -17.44667,
-                    latitudeDelta: 0.01,
-                    longitudeDelta: 0.01,
-                  }}
-                  scrollEnabled={false}
-                  zoomEnabled={false}
-                >
-                  <Marker 
-                    coordinate={{
-                      latitude: item.localisation?.latitude || 14.69275,
-                      longitude: item.localisation?.longitude || -17.44667,
-                    }}
-                    title={item.titre}
-                    description={item.localisation?.adresse}
-                  />
-                </MapView>
-                <Text style={styles.addressText}>📍 {item.localisation?.adresse || "Localisation non spécifiée"}</Text>
-              </View>
+              <TouchableOpacity 
+                style={styles.mapContainer}
+                activeOpacity={0.8}
+                onPress={(e) => {
+                  e.stopPropagation();
+                  const lat = item.localisation?.latitude || 14.69275;
+                  const lng = item.localisation?.longitude || -17.44667;
+                  Linking.openURL(`https://www.google.com/maps/search/?api=1&query=${lat},${lng}`);
+                }}
+              >
+                <View style={styles.mapActionRow}>
+                  <Text style={{ fontSize: 20, marginRight: 8 }}>🗺️</Text>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.mapActionTitle}>Voir l'emplacement sur la carte</Text>
+                    <Text style={styles.addressText} numberOfLines={1}>
+                      📍 {item.localisation?.ville ? `${item.localisation.ville} • ` : ''}{item.localisation?.adresse || "Localisation non spécifiée"}
+                    </Text>
+                  </View>
+                  <Text style={styles.mapActionArrow}>→</Text>
+                </View>
+              </TouchableOpacity>
 
               <View style={styles.propertyFooter}>
                 <Text style={styles.propertyPrice}>
@@ -338,9 +373,11 @@ const styles = StyleSheet.create({
   propertyTitle: { fontSize: 16, fontWeight: 'bold', color: '#1A365D', marginBottom: 4, paddingRight: 50 },
   propertyType: { fontSize: 13, color: '#718096', marginBottom: 6, fontWeight: '600' },
   propertyDescription: { fontSize: 14, color: '#4A5568', marginBottom: 12 },
-  mapContainer: { marginTop: 10, marginBottom: 12, borderRadius: 8, overflow: 'hidden', height: 140, borderColor: '#E2E8F0', borderWidth: 1 },
-  map: { flex: 1 },
-  addressText: { fontSize: 12, color: '#718096', padding: 6, backgroundColor: '#F7FAFC' },
+  mapContainer: { marginTop: 8, marginBottom: 12, borderRadius: 8, backgroundColor: '#EBF8FF', borderWidth: 1, borderColor: '#BEE3F8', padding: 10 },
+  mapActionRow: { flexDirection: 'row', alignItems: 'center' },
+  mapActionTitle: { fontSize: 13, fontWeight: 'bold', color: '#2B6CB0', marginBottom: 2 },
+  mapActionArrow: { fontSize: 16, color: '#3182CE', fontWeight: 'bold', marginLeft: 6 },
+  addressText: { fontSize: 12, color: '#4A5568' },
   propertyFooter: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', borderTopWidth: 1, borderTopColor: '#EDF2F7', paddingTop: 10 },
   propertyPrice: { fontSize: 16, fontWeight: 'bold', color: '#38A169' },
   period: { fontSize: 12, color: '#718096', fontWeight: 'normal' },
