@@ -70,7 +70,7 @@ export default function ConversationsScreen({ navigation }) {
       <Text style={styles.title}>Mes Discussions</Text>
 
       {loading ? (
-        <ActivityIndicator size="large" color="#3182CE" style={{ marginTop: 40 }} />
+        <ActivityIndicator size="large" color="#1E40AF" style={{ marginTop: 40 }} />
       ) : conversations.length === 0 ? (
         <View style={styles.emptyContainer}>
           <Text style={styles.emptyText}>Aucune conversation pour le moment.</Text>
@@ -108,7 +108,7 @@ export default function ConversationsScreen({ navigation }) {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F8F9FA', padding: 20, paddingTop: 20 },
-  title: { fontSize: 22, fontWeight: 'bold', color: '#1A365D', marginBottom: 20 },
+  title: { fontSize: 22, fontWeight: 'bold', color: '#1E40AF', marginBottom: 20 },
   emptyContainer: { padding: 40, alignItems: 'center' },
   emptyText: { color: '#718096', fontSize: 14, textAlign: 'center' },
   convCard: {
@@ -130,17 +130,17 @@ const styles = StyleSheet.create({
     width: 50,
     height: 50,
     borderRadius: 25,
-    backgroundColor: '#EBF8FF',
+    backgroundColor: '#EFF6FF',
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 15,
-    borderWidth: 1,
-    borderColor: '#BEE3F8',
+    borderWidth: 1.5,
+    borderColor: '#BFDBFE',
   },
-  avatarText: { fontSize: 20, fontWeight: 'bold', color: '#3182CE' },
+  avatarText: { fontSize: 20, fontWeight: 'bold', color: '#1E40AF' },
   convInfo: { flex: 1 },
   convHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 },
   userName: { fontSize: 16, fontWeight: 'bold', color: '#2D3748' },
-  propertyRef: { fontSize: 11, color: '#3182CE', backgroundColor: '#EBF8FF', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4, maxWidth: '45%' },
+  propertyRef: { fontSize: 11, color: '#1E40AF', backgroundColor: '#EFF6FF', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4, maxWidth: '45%' },
   lastMessage: { fontSize: 14, color: '#718096' },
 });

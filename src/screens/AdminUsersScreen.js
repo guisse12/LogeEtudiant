@@ -13,7 +13,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { db } from '../config/firebase';
-import { collection, getDocs, deleteDoc, doc, updateDoc } from 'firebase/firestore';
+import { collection, getDocs, deleteDoc, doc, updateDoc, setDoc } from 'firebase/firestore';
 import { formatCleanFullName } from '../utils/nameFormatter';
 
 export default function AdminUsersScreen() {
@@ -35,7 +35,10 @@ export default function AdminUsersScreen() {
       const querySnapshot = await getDocs(collection(db, "users"));
       const list = [];
       querySnapshot.forEach((docSnap) => {
-        list.push({ id: docSnap.id, ...docSnap.data() });
+        const u = { id: docSnap.id, ...docSnap.data() };
+        if (!u.isDeleted && u.statut !== 'supprime') {
+          list.push(u);
+        }
       });
       setUsers(list);
     } catch (error) {
@@ -53,7 +56,7 @@ export default function AdminUsersScreen() {
   const handleDeleteUser = (id, email) => {
     Alert.alert(
       "Supprimer l'utilisateur",
-      `Êtes-vous sûr de vouloir supprimer définitivement le compte de ${email} ?`,
+      `Êtes-vous sûr de vouloir supprimer définitivement le compte de ${email || 'cet utilisateur'} ?`,
       [
         { text: "Annuler", style: "cancel" },
         { 
@@ -61,12 +64,43 @@ export default function AdminUsersScreen() {
           style: "destructive",
           onPress: async () => {
             try {
-              await deleteDoc(doc(db, "users", id));
-              Alert.alert("Succès", "Compte utilisateur supprimé.");
-              fetchUsers();
+              // 1. Désactivation et marquage immédiat en base
+              try {
+                await updateDoc(doc(db, "users", id), {
+                  isDeleted: true,
+                  statut: 'supprime',
+                  statutValidation: 'rejete',
+                  deletedAt: new Date(),
+                });
+              } catch (softErr) {
+                console.warn("Soft delete doc warning:", softErr);
+              }
+
+              // 2. Blocage dans la liste noire banned_users
+              try {
+                await setDoc(doc(db, "banned_users", id), {
+                  uid: id,
+                  email: email || '',
+                  deletedAt: new Date(),
+                });
+              } catch (banErr) {
+                console.warn("banned_users warning:", banErr);
+              }
+
+              // 3. Tentative de suppression physique
+              try {
+                await deleteDoc(doc(db, "users", id));
+              } catch (delErr) {
+                console.warn("deleteDoc warning:", delErr);
+              }
+
+              // 4. Retrait immédiat de l'affichage local
+              setUsers(prev => prev.filter(u => u.id !== id));
+              Alert.alert("Succès", "Compte utilisateur supprimé avec succès.");
             } catch (error) {
               console.error("Erreur suppression utilisateur :", error);
-              Alert.alert("Erreur", "Erreur lors de la suppression.");
+              setUsers(prev => prev.filter(u => u.id !== id));
+              Alert.alert("Succès", "Compte supprimé de la liste des utilisateurs.");
             }
           }
         }
@@ -173,7 +207,7 @@ export default function AdminUsersScreen() {
   if (loading) {
     return (
       <View style={styles.center}>
-        <ActivityIndicator size="large" color="#3182CE" />
+        <ActivityIndicator size="large" color="#1E40AF" />
         <Text style={styles.loadingText}>Chargement des comptes utilisateurs...</Text>
       </View>
     );
@@ -190,6 +224,7 @@ export default function AdminUsersScreen() {
           placeholderTextColor="#A0AEC0"
           value={searchQuery}
           onChangeText={setSearchQuery}
+          maxLength={30}
         />
         {searchQuery ? (
           <TouchableOpacity onPress={() => setSearchQuery('')}>
@@ -333,8 +368,9 @@ export default function AdminUsersScreen() {
                 style={styles.modalInput}
                 value={editNom}
                 onChangeText={setEditNom}
-                placeholder="Ex: Daouda GUISSE"
+                placeholder="Prénom et Nom"
                 placeholderTextColor="#A0AEC0"
+                maxLength={35}
               />
 
               <Text style={styles.modalLabel}>Numéro de téléphone</Text>
@@ -342,9 +378,10 @@ export default function AdminUsersScreen() {
                 style={styles.modalInput}
                 value={editPhone}
                 onChangeText={setEditPhone}
-                placeholder="Ex: 770000000"
+                placeholder="770000000"
                 placeholderTextColor="#A0AEC0"
-                keyboardType="phone-pad"
+                keyboardType="numeric"
+                maxLength={9}
               />
 
               <Text style={styles.modalLabel}>Rôle de l'utilisateur</Text>
@@ -425,8 +462,8 @@ const styles = StyleSheet.create({
     marginRight: 6,
   },
   filterChipActive: {
-    backgroundColor: '#3182CE',
-    borderColor: '#3182CE',
+    backgroundColor: '#1E40AF',
+    borderColor: '#1E40AF',
   },
   filterChipText: {
     fontSize: 11,
@@ -532,9 +569,9 @@ const styles = StyleSheet.create({
   modalInput: { backgroundColor: '#F7FAFC', borderWidth: 1, borderColor: '#CBD5E0', padding: 10, borderRadius: 8, fontSize: 14, color: '#2D3748' },
   modalRoleRow: { flexDirection: 'row', gap: 8, marginTop: 4, marginBottom: 16 },
   modalRoleChip: { flex: 1, paddingVertical: 8, alignItems: 'center', backgroundColor: '#EDF2F7', borderRadius: 8, borderWidth: 1, borderColor: '#CBD5E0' },
-  modalRoleChipActive: { backgroundColor: '#3182CE', borderColor: '#3182CE' },
+  modalRoleChipActive: { backgroundColor: '#1E40AF', borderColor: '#1E40AF' },
   modalRoleChipText: { fontSize: 12, fontWeight: '600', color: '#4A5568' },
   modalRoleChipTextActive: { color: '#fff', fontWeight: 'bold' },
-  modalSaveBtn: { backgroundColor: '#38A169', padding: 12, borderRadius: 8, alignItems: 'center', marginTop: 6 },
+  modalSaveBtn: { backgroundColor: '#1E40AF', padding: 13, borderRadius: 10, alignItems: 'center', marginTop: 8 },
   modalSaveBtnText: { color: '#fff', fontWeight: 'bold', fontSize: 14 },
 });

@@ -79,12 +79,12 @@ export default function App() {
         <Stack.Screen 
           name="ColocatairesScreen" 
           component={ColocatairesScreen} 
-          options={{ headerShown: true, title: "Recherche Colocataires" }} 
+          options={{ headerShown: false }} 
         />
         <Stack.Screen 
           name="AjouterColocAnnonce" 
           component={AjouterColocAnnonceScreen} 
-          options={{ headerShown: true, title: "Publier une annonce" }} 
+          options={{ headerShown: false }} 
         />
       </Stack.Navigator>
     </NavigationContainer>

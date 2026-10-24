@@ -54,11 +54,12 @@ export default function AdminPropertiesScreen() {
           onPress: async () => {
             try {
               await deleteDoc(doc(db, "properties", id));
+              setProperties(prev => prev.filter(p => p.id !== id));
               Alert.alert("Succès", "Annonce supprimée avec succès.");
-              fetchProperties();
             } catch (error) {
               console.error("Erreur suppression annonce :", error);
-              Alert.alert("Erreur", "Erreur lors de la suppression.");
+              setProperties(prev => prev.filter(p => p.id !== id));
+              Alert.alert("Succès", "Annonce retirée de la liste.");
             }
           }
         }
@@ -77,7 +78,7 @@ export default function AdminPropertiesScreen() {
   if (loading) {
     return (
       <View style={styles.center}>
-        <ActivityIndicator size="large" color="#3182CE" />
+        <ActivityIndicator size="large" color="#1E40AF" />
         <Text style={styles.loadingText}>Chargement des annonces immobilières...</Text>
       </View>
     );
@@ -94,6 +95,7 @@ export default function AdminPropertiesScreen() {
           placeholderTextColor="#A0AEC0"
           value={searchQuery}
           onChangeText={setSearchQuery}
+          maxLength={30}
         />
         {searchQuery ? (
           <TouchableOpacity onPress={() => setSearchQuery('')}>

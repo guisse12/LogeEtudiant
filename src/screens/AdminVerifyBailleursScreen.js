@@ -109,7 +109,7 @@ export default function AdminVerifyBailleursScreen() {
   if (loading) {
     return (
       <View style={styles.center}>
-        <ActivityIndicator size="large" color="#3182CE" />
+        <ActivityIndicator size="large" color="#1E40AF" />
         <Text style={styles.loadingText}>Vérification des profils bailleurs...</Text>
       </View>
     );

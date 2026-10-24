@@ -172,6 +172,7 @@ export default function ChatScreen({ route, navigation }) {
           value={inputText}
           onChangeText={setInputText}
           multiline
+          maxLength={500}
         />
         <TouchableOpacity style={styles.sendButton} onPress={sendMessage}>
           <Text style={styles.sendButtonText}>Envoyer</Text>
@@ -191,7 +192,7 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   myMessage: {
-    backgroundColor: '#3182CE',
+    backgroundColor: '#1E40AF',
     alignSelf: 'flex-end',
     borderBottomRightRadius: 2,
   },
@@ -225,7 +226,7 @@ const styles = StyleSheet.create({
   },
   sendButton: {
     marginLeft: 10,
-    backgroundColor: '#3182CE',
+    backgroundColor: '#1E40AF',
     paddingVertical: 10,
     paddingHorizontal: 16,
     borderRadius: 20,

@@ -10,8 +10,12 @@ import {
   TextInput, 
   Alert, 
   ActivityIndicator, 
-  Dimensions 
+  Dimensions, 
+  SafeAreaView, 
+  Platform, 
+  StatusBar 
 } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { WebView } from 'react-native-webview';
 import { collection, addDoc, getDocs, doc, setDoc, deleteDoc, getDoc, query, orderBy, where, serverTimestamp } from 'firebase/firestore';
 import { db, auth } from '../config/firebase';
@@ -82,7 +86,7 @@ export default function PropertyDetailsScreen({ route, navigation }) {
           savedAt: serverTimestamp()
         });
         setIsFavorite(true);
-        Alert.alert("Succès", "Logement ajouté à vos favoris !");
+        Alert.alert("Favoris ❤️", "Logement ajouté à vos favoris !");
       }
     } catch (error) {
       console.error("Erreur modification favori :", error);
@@ -107,62 +111,59 @@ export default function PropertyDetailsScreen({ route, navigation }) {
 
   const handleAddReview = async () => {
     if (!newComment.trim()) {
-      Alert.alert("Erreur", "Veuillez écrire un commentaire.");
+      Alert.alert("Avis vide", "Veuillez écrire un court commentaire.");
       return;
     }
 
-    const ratingNum = Number(newRating);
+    const ratingNum = parseInt(newRating, 10);
     if (isNaN(ratingNum) || ratingNum < 1 || ratingNum > 5) {
-      Alert.alert("Erreur", "Veuillez entrer une note valide entre 1 et 5.");
+      Alert.alert("Note invalide", "Veuillez entrer une note entre 1 et 5.");
       return;
     }
 
     try {
       await addDoc(collection(db, "properties", property.id, "reviews"), {
-        userId: auth.currentUser?.uid,
-        userEmail: auth.currentUser?.email || "Étudiant",
+        userId: auth.currentUser ? auth.currentUser.uid : "anonyme",
+        userEmail: auth.currentUser ? auth.currentUser.email : "Étudiant",
         rating: ratingNum,
         comment: newComment.trim(),
-        createdAt: serverTimestamp(),
+        createdAt: new Date(),
       });
 
-      Alert.alert("Succès", "Votre avis a été publié !");
       setNewComment('');
       setNewRating('5');
+      Alert.alert("Merci ✨", "Votre avis a été publié avec succès.");
       fetchReviews();
     } catch (error) {
       console.error("Erreur ajout avis :", error);
-      Alert.alert("Erreur", "Impossible de publier l'avis.");
+      Alert.alert("Erreur", "Impossible d'ajouter votre avis pour le moment.");
     }
   };
 
-  // Fonction pour signaler une annonce suspecte ou une arnaque
+  const averageRating = reviews.length > 0
+    ? (reviews.reduce((acc, curr) => acc + (curr.rating || 5), 0) / reviews.length).toFixed(1)
+    : "5.0";
+
   const handleReportProperty = () => {
     Alert.alert(
-      "Signaler l'annonce",
-      "Voulez-vous signaler ce logement comme étant une arnaque ou une fausse annonce auprès de l'administration ?",
+      "Signaler ce logement",
+      "Pensez-vous qu'il s'agit d'une annonce frauduleuse ou incorrecte ?",
       [
         { text: "Annuler", style: "cancel" },
-        {
-          text: "Signaler",
+        { 
+          text: "Oui, signaler", 
           style: "destructive",
           onPress: async () => {
             try {
-              if (!auth.currentUser) {
-                Alert.alert("Erreur", "Vous devez être connecté pour signaler une annonce.");
-                return;
-              }
-
               await addDoc(collection(db, "reports"), {
                 propertyId: property.id,
-                propertyTitle: property.titre || "Logement sans titre",
-                userId: auth.currentUser.uid,
-                userEmail: auth.currentUser.email || "Étudiant",
-                raison: "Annonce suspecte / Fraude potentielle signalée par un étudiant",
-                createdAt: serverTimestamp(),
+                propertyTitle: property.titre,
+                reportedBy: auth.currentUser ? auth.currentUser.uid : "anonyme",
+                userEmail: auth.currentUser ? auth.currentUser.email : "Inconnu",
+                date: new Date(),
+                status: "en_attente",
               });
-
-              Alert.alert("Signalé", "Le signalement a bien été transmis à l'administrateur.");
+              Alert.alert("Signalement reçu", "Merci pour votre vigilance. Notre équipe va examiner ce logement.");
             } catch (error) {
               console.error("Erreur signalement :", error);
               Alert.alert("Erreur", "Impossible d'envoyer le signalement.");
@@ -173,21 +174,15 @@ export default function PropertyDetailsScreen({ route, navigation }) {
     );
   };
 
-  const averageRating = reviews.length > 0 
-    ? (reviews.reduce((acc, curr) => acc + (curr.rating || 0), 0) / reviews.length).toFixed(1) 
-    : 'N/A';
-
   const handleContactProprietaire = (telephone, titreBien) => {
     if (!telephone) {
-      Alert.alert("Information", "Le numéro de téléphone du propriétaire n'est pas disponible pour ce bien.");
+      Alert.alert("Information", "Le numéro de téléphone du bailleur n'est pas disponible.");
       return;
     }
 
     let cleanPhone = String(telephone).replace(/[^0-9]/g, '');
     if (cleanPhone.startsWith('00221')) {
       cleanPhone = cleanPhone.substring(2);
-    } else if (cleanPhone.startsWith('221')) {
-      // Déjà avec 221
     } else if (cleanPhone.length === 9) {
       cleanPhone = `221${cleanPhone}`;
     }
@@ -195,8 +190,7 @@ export default function PropertyDetailsScreen({ route, navigation }) {
     const message = `Bonjour, je suis intéressé(e) par votre logement "${titreBien || 'étudiant'}" vu sur LogeÉtudiant. Est-il toujours disponible ?`;
     const whatsappUrl = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(message)}`;
 
-    Linking.openURL(whatsappUrl).catch((err) => {
-      console.error("Erreur lors de l'ouverture de WhatsApp :", err);
+    Linking.openURL(whatsappUrl).catch(() => {
       Linking.openURL(`tel:${cleanPhone}`);
     });
   };
@@ -208,12 +202,12 @@ export default function PropertyDetailsScreen({ route, navigation }) {
       const proprietaireId = property.proprietaireId || property.userId;
 
       if (!proprietaireId) {
-        Alert.alert("Erreur", "Impossible d'identifier le propriétaire de ce bien.");
+        Alert.alert("Information", "Impossible d'identifier le propriétaire de ce bien.");
         return;
       }
 
       if (currentUserId === proprietaireId) {
-        Alert.alert("Information", "Vous ne pouvez pas démarrer une conversation avec vous-même.");
+        Alert.alert("Information", "Vous êtes le propriétaire de cette annonce.");
         return;
       }
 
@@ -222,10 +216,10 @@ export default function PropertyDetailsScreen({ route, navigation }) {
         const ownerDocSnap = await getDoc(doc(db, "users", proprietaireId));
         if (ownerDocSnap.exists()) {
           const ownerData = ownerDocSnap.data();
-          ownerName = ownerData.displayName || ownerData.nom || ownerData.prenom || "Propriétaire";
+          ownerName = ownerData.nomComplet || ownerData.nom || ownerData.prenom || "Propriétaire";
         }
       } catch (err) {
-        console.error("Impossible de récupérer le nom du propriétaire :", err);
+        console.error("Erreur nom proprio :", err);
       }
 
       const q = query(
@@ -265,8 +259,8 @@ export default function PropertyDetailsScreen({ route, navigation }) {
       });
 
     } catch (error) {
-      console.error("Erreur lors de l'initialisation de la conversation :", error);
-      Alert.alert("Erreur", "Impossible d'ouvrir la discussion pour le moment.");
+      console.error("Erreur conversation :", error);
+      Alert.alert("Erreur", "Impossible d'ouvrir la messagerie.");
     }
   };
 
@@ -279,204 +273,535 @@ export default function PropertyDetailsScreen({ route, navigation }) {
   const mediaList = property.images || property.medias || [];
 
   return (
-    <ScrollView contentContainerStyle={styles.container}>
-      <View style={styles.topBar}>
-        <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
-          <Text style={styles.backButtonText}>← Retour</Text>
+    <SafeAreaView style={styles.safeArea}>
+      
+      {/* NAVBAR FIXE TOUT EN HAUT AVEC SAFE AREA (NE CHEVAUCHE PAS LA BARRE DE STATUT) */}
+      <View style={styles.fixedTopBar}>
+        <TouchableOpacity 
+          style={styles.navBackBtn} 
+          onPress={() => navigation.goBack()}
+          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+        >
+          <Ionicons name="arrow-back" size={22} color="#1E40AF" />
+          <Text style={styles.navBackText}>Retour</Text>
         </TouchableOpacity>
 
         <TouchableOpacity 
-          style={styles.favoriteButton} 
+          style={styles.navFavBtn} 
           onPress={toggleFavorite}
           disabled={loadingFavorite}
+          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
         >
-          <Text style={styles.favoriteIconText}>
-            {isFavorite ? '❤️' : '🤍'}
-          </Text>
+          <Ionicons 
+            name={isFavorite ? "heart" : "heart-outline"} 
+            size={22} 
+            color={isFavorite ? "#EF4444" : "#1E40AF"} 
+          />
         </TouchableOpacity>
       </View>
 
-      {mediaList.length > 0 ? (
-        <ScrollView horizontal pagingEnabled showsHorizontalScrollIndicator={false} style={styles.imageScrollContainer}>
-          {mediaList.map((mediaUri, index) => {
-            if (isVideo(mediaUri)) {
-              return (
-                <View key={index} style={styles.mediaContainer}>
-                  <WebView 
-                    source={{ uri: mediaUri }} 
-                    style={styles.propertyImage} 
-                    allowsFullscreenVideo={true}
-                    javaScriptEnabled={true}
-                  />
-                </View>
-              );
-            } else {
-              return (
-                <View key={index} style={styles.mediaContainer}>
-                  <PropertyDetailImage uri={mediaUri} />
-                </View>
-              );
-            }
-          })}
-        </ScrollView>
-      ) : (
-        <PropertyDetailImage uri={property.image} />
-      )}
-
-      <View style={styles.badgeContainer}>
-        {property.localisation?.ville ? (
-          <View style={[styles.propertyBadge, { backgroundColor: '#319795' }]}>
-            <Text style={styles.propertyBadgeText}>🏙️ {property.localisation.ville}</Text>
-          </View>
-        ) : null}
-        <View style={styles.propertyBadge}>
-          <Text style={styles.propertyBadgeText}>{property.universiteId || "Campus"}</Text>
-        </View>
-        <View style={styles.typeBadge}>
-          <Text style={styles.typeBadgeText}>{property.type || "Logement"}</Text>
-        </View>
-        <View style={styles.ratingBadge}>
-          <Text style={styles.ratingBadgeText}>⭐ {averageRating} {reviews.length > 0 ? `(${reviews.length})` : ''}</Text>
-        </View>
-      </View>
-
-      <Text style={styles.propertyTitle}>{property.titre}</Text>
-      <Text style={styles.propertyPrice}>{property.prix} FCFA <Text style={styles.period}>/ mois</Text></Text>
-
-      <TouchableOpacity style={styles.internalChatButton} onPress={handleDemarrerConversation}>
-        <Text style={styles.internalChatButtonText}>💬 Discuter en interne avec le propriétaire</Text>
-      </TouchableOpacity>
-
-      <View style={styles.sectionCard}>
-        <Text style={styles.sectionTitle}>Description</Text>
-        <Text style={styles.propertyDescription}>{property.description || "Aucune description fournie."}</Text>
-      </View>
-
-      <View style={styles.sectionCard}>
-        <Text style={styles.sectionTitle}>Localisation</Text>
-        <Text style={styles.addressText}>
-          📍 {property.localisation?.ville ? `${property.localisation.ville} • ` : ''}{property.localisation?.adresse || "Adresse non spécifiée"}
-        </Text>
+      <ScrollView contentContainerStyle={styles.scrollContainer} showsVerticalScrollIndicator={false}>
         
-        <TouchableOpacity 
-          style={styles.mapContainer}
-          onPress={() => {
-            const lat = property.localisation?.latitude || 14.69275;
-            const lng = property.localisation?.longitude || -17.44667;
-            Linking.openURL(`https://www.google.com/maps/search/?api=1&query=${lat},${lng}`);
-          }}
-        >
-          <Text style={{ fontSize: 24, marginBottom: 5 }}>🗺️</Text>
-          <Text style={{ color: '#3182CE', fontWeight: 'bold', fontSize: 14 }}>Ouvrir l'emplacement sur Google Maps</Text>
-          <Text style={{ color: '#718096', fontSize: 12, marginTop: 2 }}>{property.localisation?.adresse || "Cliquer pour voir l'itinéraire"}</Text>
-        </TouchableOpacity>
-      </View>
-
-      <View style={styles.sectionCard}>
-        <Text style={styles.sectionTitle}>Avis des étudiants ({reviews.length})</Text>
-
-        <View style={styles.reviewForm}>
-          <Text style={styles.subLabel}>Laisser un avis :</Text>
-          <View style={styles.reviewInputRow}>
-            <TextInput 
-              style={styles.ratingInput} 
-              placeholder="Note (1-5)" 
-              placeholderTextColor="#A0AEC0"
-              keyboardType="numeric"
-              value={newRating} 
-              onChangeText={setNewRating} 
-              maxLength={1}
-            />
-            <TextInput 
-              style={styles.commentInput} 
-              placeholder="Qu'avez-vous pensé de ce logement ?" 
-              placeholderTextColor="#A0AEC0"
-              value={newComment} 
-              onChangeText={setNewComment} 
-            />
+        {/* CARROUSEL IMAGES / VIDÉOS */}
+        {mediaList.length > 0 ? (
+          <ScrollView horizontal pagingEnabled showsHorizontalScrollIndicator={false} style={styles.imageScrollContainer}>
+            {mediaList.map((mediaUri, index) => {
+              if (isVideo(mediaUri)) {
+                return (
+                  <View key={index} style={styles.mediaContainer}>
+                    <WebView 
+                      source={{ uri: mediaUri }} 
+                      style={styles.propertyImage} 
+                      allowsFullscreenVideo={true}
+                      javaScriptEnabled={true}
+                    />
+                  </View>
+                );
+              } else {
+                return (
+                  <View key={index} style={styles.mediaContainer}>
+                    <PropertyDetailImage uri={mediaUri} />
+                  </View>
+                );
+              }
+            })}
+          </ScrollView>
+        ) : (
+          <View style={styles.singleImageContainer}>
+            <PropertyDetailImage uri={property.image} />
           </View>
-          <TouchableOpacity style={styles.submitReviewBtn} onPress={handleAddReview}>
-            <Text style={styles.submitReviewText}>Envoyer l'avis</Text>
+        )}
+
+        {/* BADGES PRO */}
+        <View style={styles.badgeContainer}>
+          {property.localisation?.ville ? (
+            <View style={[styles.badgePill, { backgroundColor: '#EFF6FF', borderColor: '#BFDBFE' }]}>
+              <Ionicons name="location-outline" size={13} color="#1E40AF" style={{ marginRight: 3 }} />
+              <Text style={[styles.badgeText, { color: '#1E40AF' }]}>{property.localisation.ville}</Text>
+            </View>
+          ) : null}
+
+          <View style={[styles.badgePill, { backgroundColor: '#EFF6FF', borderColor: '#BFDBFE' }]}>
+            <Ionicons name="school-outline" size={13} color="#1E40AF" style={{ marginRight: 3 }} />
+            <Text style={[styles.badgeText, { color: '#1E40AF' }]}>{property.universiteId || "Campus"}</Text>
+          </View>
+
+          <View style={[styles.badgePill, { backgroundColor: '#F1F5F9', borderColor: '#E2E8F0' }]}>
+            <Ionicons name="home-outline" size={13} color="#475569" style={{ marginRight: 3 }} />
+            <Text style={[styles.badgeText, { color: '#475569' }]}>{property.type || "Logement"}</Text>
+          </View>
+
+          <View style={[styles.badgePill, { backgroundColor: '#FEF3C7', borderColor: '#FDE68A' }]}>
+            <Ionicons name="star" size={13} color="#D97706" style={{ marginRight: 3 }} />
+            <Text style={[styles.badgeText, { color: '#B45309' }]}>
+              {averageRating} {reviews.length > 0 ? `(${reviews.length})` : ''}
+            </Text>
+          </View>
+        </View>
+
+        {/* TITRE ET PRIX HARMONISÉS */}
+        <Text style={styles.propertyTitle}>{property.titre}</Text>
+        
+        <View style={styles.priceRow}>
+          <Text style={styles.propertyPrice}>
+            {Number(property.prix || 0).toLocaleString()} FCFA
+          </Text>
+          <Text style={styles.period}> / mois</Text>
+        </View>
+
+        {/* BOUTON MESSAGERIE INTERNE (BLEU ROYAL) */}
+        <TouchableOpacity 
+          style={styles.internalChatButton} 
+          onPress={handleDemarrerConversation}
+          activeOpacity={0.85}
+        >
+          <Ionicons name="chatbubbles" size={18} color="#FFFFFF" style={{ marginRight: 8 }} />
+          <Text style={styles.internalChatButtonText}>Discuter en direct avec le propriétaire</Text>
+        </TouchableOpacity>
+
+        {/* CARTE DESCRIPTION */}
+        <View style={styles.sectionCard}>
+          <View style={styles.sectionHeaderRow}>
+            <Ionicons name="document-text-outline" size={18} color="#1E40AF" style={{ marginRight: 6 }} />
+            <Text style={styles.sectionTitle}>Description</Text>
+          </View>
+          <Text style={styles.propertyDescription}>{property.description || "Aucune description fournie."}</Text>
+        </View>
+
+        {/* CARTE LOCALISATION & GOOGLE MAPS */}
+        <View style={styles.sectionCard}>
+          <View style={styles.sectionHeaderRow}>
+            <Ionicons name="map-outline" size={18} color="#1E40AF" style={{ marginRight: 6 }} />
+            <Text style={styles.sectionTitle}>Localisation</Text>
+          </View>
+          <Text style={styles.addressText}>
+            📍 {property.localisation?.ville ? `${property.localisation.ville} • ` : ''}{property.localisation?.adresse || "Adresse non spécifiée"}
+          </Text>
+          
+          <TouchableOpacity 
+            style={styles.mapContainer}
+            onPress={() => {
+              const lat = property.localisation?.latitude || 14.69275;
+              const lng = property.localisation?.longitude || -17.44667;
+              Linking.openURL(`https://www.google.com/maps/search/?api=1&query=${lat},${lng}`);
+            }}
+            activeOpacity={0.85}
+          >
+            <View style={styles.mapIconCircle}>
+              <Ionicons name="navigate" size={22} color="#1E40AF" />
+            </View>
+            <View style={{ flex: 1, marginLeft: 12 }}>
+              <Text style={styles.mapBtnTitle}>Ouvrir l'itinéraire sur Google Maps</Text>
+              <Text style={styles.mapBtnSubtitle}>Voir la distance exacte avec votre université</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={18} color="#1E40AF" />
           </TouchableOpacity>
         </View>
 
-        {loadingReviews ? (
-          <ActivityIndicator size="small" color="#3182CE" style={{ marginTop: 15 }} />
-        ) : reviews.length === 0 ? (
-          <Text style={styles.noReviewsText}>Aucun avis pour l'instant. Soyez le premier à en laisser un !</Text>
-        ) : (
-          reviews.map((rev) => (
-            <View key={rev.id} style={styles.reviewItem}>
-              <View style={styles.reviewHeader}>
-                <Text style={styles.reviewUser}>{rev.userEmail ? rev.userEmail.split('@')[0] : "Étudiant"}</Text>
-                <Text style={styles.reviewRating}>⭐ {rev.rating}/5</Text>
-              </View>
-              <Text style={styles.reviewComment}>{rev.comment}</Text>
+        {/* AVIS DES ÉTUDIANTS */}
+        <View style={styles.sectionCard}>
+          <View style={styles.sectionHeaderRow}>
+            <Ionicons name="chatbubble-ellipses-outline" size={18} color="#1E40AF" style={{ marginRight: 6 }} />
+            <Text style={styles.sectionTitle}>Avis des étudiants ({reviews.length})</Text>
+          </View>
+
+          <View style={styles.reviewForm}>
+            <Text style={styles.subLabel}>Donner votre avis :</Text>
+            <View style={styles.reviewInputRow}>
+              <TextInput 
+                style={styles.ratingInput} 
+                placeholder="Note (1-5)" 
+                placeholderTextColor="#94A3B8"
+                keyboardType="numeric"
+                value={newRating} 
+                onChangeText={setNewRating} 
+                maxLength={1}
+              />
+              <TextInput 
+                style={styles.commentInput} 
+                placeholder="Logement propre et quartier calme..." 
+                placeholderTextColor="#94A3B8"
+                value={newComment} 
+                onChangeText={setNewComment} 
+                maxLength={200}
+              />
             </View>
-          ))
-        )}
-      </View>
+            <TouchableOpacity style={styles.submitReviewBtn} onPress={handleAddReview}>
+              <Text style={styles.submitReviewText}>Publier mon avis</Text>
+            </TouchableOpacity>
+          </View>
 
-      <TouchableOpacity 
-        style={styles.contactButton}
-        onPress={() => handleContactProprietaire(property.telephoneProprietaire || property.telephone, property.titre)}
-      >
-        <Text style={styles.contactButtonText}>📞 Contacter par WhatsApp / Téléphone</Text>
-      </TouchableOpacity>
+          {loadingReviews ? (
+            <ActivityIndicator size="small" color="#1E40AF" style={{ marginTop: 15 }} />
+          ) : reviews.length === 0 ? (
+            <Text style={styles.noReviewsText}>Aucun avis pour l'instant. Soyez le premier étudiant à donner votre avis !</Text>
+          ) : (
+            reviews.map((rev) => (
+              <View key={rev.id} style={styles.reviewItem}>
+                <View style={styles.reviewHeader}>
+                  <Text style={styles.reviewUser}>
+                    <Ionicons name="person-circle-outline" size={14} color="#64748B" /> {rev.userEmail ? rev.userEmail.split('@')[0] : "Étudiant"}
+                  </Text>
+                  <Text style={styles.reviewRating}>⭐ {rev.rating}/5</Text>
+                </View>
+                <Text style={styles.reviewComment}>{rev.comment}</Text>
+              </View>
+            ))
+          )}
+        </View>
 
-      {/* Bouton de signalement d'arnaque */}
-      <TouchableOpacity 
-        style={styles.reportButton}
-        onPress={handleReportProperty}
-      >
-        <Text style={styles.reportButtonText}>🚨 Signaler cette annonce (Arnaque)</Text>
-      </TouchableOpacity>
-    </ScrollView>
+        {/* BOUTON CONTACT WHATSAPP / TÉLÉPHONE */}
+        <TouchableOpacity 
+          style={styles.contactButton}
+          onPress={() => handleContactProprietaire(property.telephoneProprietaire || property.telephone, property.titre)}
+          activeOpacity={0.85}
+        >
+          <Ionicons name="logo-whatsapp" size={20} color="#FFFFFF" style={{ marginRight: 8 }} />
+          <Text style={styles.contactButtonText}>Contacter par WhatsApp / Téléphone</Text>
+        </TouchableOpacity>
+
+        {/* BOUTON SIGNALEMENT ARNAQUE */}
+        <TouchableOpacity 
+          style={styles.reportButton}
+          onPress={handleReportProperty}
+          activeOpacity={0.8}
+        >
+          <Ionicons name="shield-outline" size={16} color="#DC2626" style={{ marginRight: 6 }} />
+          <Text style={styles.reportButtonText}>Signaler cette annonce (Suspicion d'arnaque)</Text>
+        </TouchableOpacity>
+
+        <View style={{ height: 40 }} />
+      </ScrollView>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { padding: 20, backgroundColor: '#F8F9FA', flexGrow: 1, paddingTop: 40 },
-  topBar: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15 },
-  backButton: { justifyContent: 'center' },
-  backButtonText: { fontSize: 16, color: '#3182CE', fontWeight: 'bold' },
-  favoriteButton: { backgroundColor: '#FFF', padding: 8, borderRadius: 20, borderWidth: 1, borderColor: '#E2E8F0', elevation: 2 },
-  favoriteIconText: { fontSize: 18 },
-  imageScrollContainer: { marginBottom: 15, height: 220, borderRadius: 12 },
-  mediaContainer: { width: width - 40, height: 220, marginRight: 10, borderRadius: 12, overflow: 'hidden', backgroundColor: '#000' },
-  propertyImage: { width: '100%', height: '100%', borderRadius: 12, resizeMode: 'cover' },
-  badgeContainer: { flexDirection: 'row', marginBottom: 10, alignItems: 'center' },
-  propertyBadge: { backgroundColor: '#EBF8FF', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 6, marginRight: 8 },
-  propertyBadgeText: { color: '#3182CE', fontSize: 13, fontWeight: 'bold' },
-  typeBadge: { backgroundColor: '#EDF2F7', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 6, marginRight: 8 },
-  typeBadgeText: { color: '#4A5568', fontSize: 13, fontWeight: 'bold' },
-  ratingBadge: { backgroundColor: '#FEFCBF', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 6 },
-  ratingBadgeText: { color: '#744210', fontSize: 13, fontWeight: 'bold' },
-  propertyTitle: { fontSize: 20, fontWeight: 'bold', color: '#1A365D', marginBottom: 8 },
-  propertyPrice: { fontSize: 18, fontWeight: 'bold', color: '#38A169', marginBottom: 15 },
-  period: { fontSize: 13, color: '#718096', fontWeight: 'normal' },
-  internalChatButton: { backgroundColor: '#3182CE', padding: 12, borderRadius: 8, alignItems: 'center', marginBottom: 15 },
-  internalChatButtonText: { color: '#fff', fontSize: 14, fontWeight: 'bold' },
-  sectionCard: { backgroundColor: '#fff', padding: 15, borderRadius: 10, marginBottom: 15, borderWidth: 1, borderColor: '#E2E8F0' },
-  sectionTitle: { fontSize: 16, fontWeight: 'bold', color: '#2D3748', marginBottom: 10 },
-  propertyDescription: { fontSize: 14, color: '#4A5568', lineHeight: 20 },
-  addressText: { fontSize: 14, color: '#4A5568', marginBottom: 10 },
-  mapContainer: { height: 130, backgroundColor: '#EDF2F7', borderRadius: 8, borderWidth: 1, borderColor: '#CBD5E0', justifyContent: 'center', alignItems: 'center', padding: 10 },
-  reviewForm: { marginBottom: 15, paddingBottom: 15, borderBottomWidth: 1, borderBottomColor: '#EDF2F7' },
-  subLabel: { fontSize: 13, fontWeight: '600', color: '#4A5568', marginBottom: 6 },
-  reviewInputRow: { flexDirection: 'row', marginBottom: 8 },
-  ratingInput: { width: 70, backgroundColor: '#F7FAFC', borderWidth: 1, borderColor: '#CBD5E0', padding: 8, borderRadius: 6, marginRight: 8, textAlign: 'center', fontSize: 14, color: '#2D3748' },
-  commentInput: { flex: 1, backgroundColor: '#F7FAFC', borderWidth: 1, borderColor: '#CBD5E0', padding: 8, borderRadius: 6, fontSize: 14, color: '#2D3748' },
-  submitReviewBtn: { backgroundColor: '#3182CE', padding: 8, borderRadius: 6, alignItems: 'center' },
-  submitReviewText: { color: '#fff', fontWeight: 'bold', fontSize: 13 },
-  noReviewsText: { color: '#718096', fontSize: 13, fontStyle: 'italic', textAlign: 'center', marginVertical: 10 },
-  reviewItem: { backgroundColor: '#F7FAFC', padding: 10, borderRadius: 6, marginBottom: 8, borderWidth: 1, borderColor: '#E2E8F0' },
-  reviewHeader: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 },
-  reviewUser: { fontWeight: 'bold', fontSize: 13, color: '#2D3748' },
-  reviewRating: { fontSize: 12, fontWeight: 'bold', color: '#D69E2E' },
-  reviewComment: { fontSize: 13, color: '#4A5568' },
-  contactButton: { backgroundColor: '#38A169', padding: 15, borderRadius: 10, alignItems: 'center', marginTop: 5, marginBottom: 10 },
-  contactButtonText: { color: '#fff', fontSize: 15, fontWeight: 'bold' },
-  reportButton: { backgroundColor: '#FFF5F5', borderWidth: 1, borderColor: '#FEB7B7', padding: 12, borderRadius: 10, alignItems: 'center', marginBottom: 30 },
-  reportButtonText: { color: '#E53E3E', fontSize: 14, fontWeight: 'bold' },
+  safeArea: {
+    flex: 1,
+    backgroundColor: '#F8FAFC',
+    paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight : 0,
+  },
+  fixedTopBar: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    backgroundColor: '#FFFFFF',
+    borderBottomWidth: 1,
+    borderBottomColor: '#E2E8F0',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 2,
+    elevation: 2,
+    zIndex: 10,
+  },
+  navBackBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 4,
+  },
+  navBackText: {
+    fontSize: 15,
+    color: '#1E40AF',
+    fontWeight: '700',
+    marginLeft: 4,
+  },
+  navFavBtn: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: '#EFF6FF',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  scrollContainer: {
+    padding: 16,
+  },
+  imageScrollContainer: {
+    marginBottom: 16,
+    height: 230,
+    borderRadius: 16,
+  },
+  singleImageContainer: {
+    marginBottom: 16,
+    height: 230,
+    borderRadius: 16,
+    overflow: 'hidden',
+  },
+  mediaContainer: {
+    width: width - 32,
+    height: 230,
+    marginRight: 10,
+    borderRadius: 16,
+    overflow: 'hidden',
+    backgroundColor: '#0F172A',
+  },
+  propertyImage: {
+    width: '100%',
+    height: '100%',
+  },
+  badgeContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    marginBottom: 10,
+    alignItems: 'center',
+  },
+  badgePill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 8,
+    marginRight: 8,
+    marginBottom: 6,
+  },
+  badgeText: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  propertyTitle: {
+    fontSize: 22,
+    fontWeight: '800',
+    color: '#0F172A',
+    marginBottom: 6,
+  },
+  priceRow: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    marginBottom: 16,
+  },
+  propertyPrice: {
+    fontSize: 22,
+    fontWeight: '900',
+    color: '#1E40AF',
+  },
+  period: {
+    fontSize: 13,
+    color: '#64748B',
+    fontWeight: '500',
+  },
+  internalChatButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#1E40AF',
+    paddingVertical: 13,
+    borderRadius: 12,
+    marginBottom: 16,
+    shadowColor: '#1E40AF',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  internalChatButtonText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  sectionCard: {
+    backgroundColor: '#FFFFFF',
+    padding: 16,
+    borderRadius: 14,
+    marginBottom: 14,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.03,
+    shadowRadius: 3,
+    elevation: 1,
+  },
+  sectionHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  sectionTitle: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: '#0F172A',
+  },
+  propertyDescription: {
+    fontSize: 14,
+    color: '#475569',
+    lineHeight: 20,
+  },
+  addressText: {
+    fontSize: 13,
+    color: '#475569',
+    marginBottom: 12,
+  },
+  mapContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#EFF6FF',
+    borderWidth: 1.5,
+    borderColor: '#BFDBFE',
+    borderRadius: 12,
+    padding: 12,
+  },
+  mapIconCircle: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#DBEAFE',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  mapBtnTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#1E40AF',
+  },
+  mapBtnSubtitle: {
+    fontSize: 11,
+    color: '#64748B',
+    marginTop: 2,
+  },
+  reviewForm: {
+    marginBottom: 14,
+    paddingBottom: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F1F5F9',
+  },
+  subLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#475569',
+    marginBottom: 6,
+  },
+  reviewInputRow: {
+    flexDirection: 'row',
+    marginBottom: 8,
+  },
+  ratingInput: {
+    width: 75,
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    padding: 9,
+    borderRadius: 8,
+    marginRight: 8,
+    textAlign: 'center',
+    fontSize: 13,
+    color: '#1E293B',
+    fontWeight: '700',
+  },
+  commentInput: {
+    flex: 1,
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    padding: 9,
+    borderRadius: 8,
+    fontSize: 13,
+    color: '#1E293B',
+  },
+  submitReviewBtn: {
+    backgroundColor: '#1E40AF',
+    paddingVertical: 10,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  submitReviewText: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+    fontSize: 13,
+  },
+  noReviewsText: {
+    color: '#94A3B8',
+    fontSize: 13,
+    fontStyle: 'italic',
+    textAlign: 'center',
+    marginVertical: 10,
+  },
+  reviewItem: {
+    backgroundColor: '#F8FAFC',
+    padding: 12,
+    borderRadius: 10,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  reviewHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 4,
+  },
+  reviewUser: {
+    fontWeight: '700',
+    fontSize: 13,
+    color: '#1E293B',
+  },
+  reviewRating: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#D97706',
+  },
+  reviewComment: {
+    fontSize: 13,
+    color: '#475569',
+  },
+  contactButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#128C7E', // Vert WhatsApp authentique plus foncé
+    paddingVertical: 14,
+    borderRadius: 12,
+    marginTop: 6,
+    marginBottom: 10,
+    shadowColor: '#128C7E',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  contactButtonText: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  reportButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#FEF2F2',
+    borderWidth: 1,
+    borderColor: '#FECACA',
+    paddingVertical: 11,
+    borderRadius: 12,
+    alignItems: 'center',
+    marginBottom: 24,
+  },
+  reportButtonText: {
+    color: '#DC2626',
+    fontSize: 13,
+    fontWeight: '700',
+  },
 });

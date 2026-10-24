@@ -8,7 +8,10 @@ import {
   Alert, 
   ActivityIndicator,
   RefreshControl,
-  Dimensions
+  Dimensions,
+  SafeAreaView,
+  StatusBar,
+  Platform
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { WebView } from 'react-native-webview';
@@ -302,7 +305,7 @@ export default function AdminHomeScreen({ navigation }) {
   if (loading) {
     return (
       <View style={styles.loaderContainer}>
-        <ActivityIndicator size="large" color="#3182CE" />
+        <ActivityIndicator size="large" color="#1E40AF" />
         <Text style={styles.loaderText}>Chargement du tableau de bord administrateur...</Text>
       </View>
     );
@@ -318,21 +321,20 @@ export default function AdminHomeScreen({ navigation }) {
   );
 
   return (
-    <ScrollView 
-      contentContainerStyle={styles.container}
-      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={['#3182CE']} />}
-    >
-      {/* 1. EN-TÊTE PROFESSIONNEL */}
-      <View style={styles.header}>
-        <View>
+    <SafeAreaView style={styles.safeArea}>
+      <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
+
+      {/* 1. NAVBAR ADMINISTRATIVE FIXE */}
+      <View style={styles.fixedNavbar}>
+        <View style={styles.headerTitleCol}>
           <View style={styles.brandRow}>
             <View style={styles.shieldIconWrapper}>
-              <Ionicons name="shield-checkmark" size={16} color="#FFFFFF" />
+              <Ionicons name="shield-checkmark" size={13} color="#FFFFFF" />
             </View>
             <Text style={styles.badgeSystem}>Administration Centrale</Text>
           </View>
           <Text style={styles.title}>Espace Administrateur</Text>
-          <Text style={styles.subtitle}>Supervision, Sécurité & Modération en temps réel</Text>
+          <Text style={styles.subtitle} numberOfLines={1}>Supervision, Sécurité & Modération en temps réel</Text>
         </View>
 
         <View style={styles.headerActions}>
@@ -341,11 +343,11 @@ export default function AdminHomeScreen({ navigation }) {
             onPress={() => navigation.navigate('Profile')}
             activeOpacity={0.8}
           >
-            <Ionicons name="person-circle-outline" size={18} color="#3182CE" style={{ marginRight: 4 }} />
+            <Ionicons name="person-circle-outline" size={18} color="#1E40AF" style={{ marginRight: 4 }} />
             <Text style={styles.profileBtnText}>Profil</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.refreshBtn} onPress={onRefresh} activeOpacity={0.8}>
-            <Ionicons name="refresh" size={18} color="#3182CE" />
+            <Ionicons name="refresh" size={18} color="#1E40AF" />
           </TouchableOpacity>
           <TouchableOpacity style={styles.logoutButton} onPress={handleLogout} activeOpacity={0.8}>
             <Ionicons name="log-out-outline" size={20} color="#E53E3E" />
@@ -353,14 +355,20 @@ export default function AdminHomeScreen({ navigation }) {
         </View>
       </View>
 
-      {/* BANNIÈRE STATUT DU SYSTÈME */}
-      <View style={styles.statusBanner}>
-        <View style={styles.statusPulseRow}>
-          <View style={styles.statusDotLive} />
-          <Text style={styles.statusTextLive}>Serveurs & Base Firebase 100% opérationnels</Text>
+      {/* 2. CONTENU DÉFILANT */}
+      <ScrollView 
+        contentContainerStyle={styles.container}
+        showsVerticalScrollIndicator={false}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={['#1E40AF']} />}
+      >
+        {/* BANNIÈRE STATUT DU SYSTÈME */}
+        <View style={styles.statusBanner}>
+          <View style={styles.statusPulseRow}>
+            <View style={styles.statusDotLive} />
+            <Text style={styles.statusTextLive}>Serveurs & Base Firebase 100% opérationnels</Text>
+          </View>
+          <Text style={styles.syncTimeText}>Sync : {lastSyncTime || '10:00'}</Text>
         </View>
-        <Text style={styles.syncTimeText}>Sync : {lastSyncTime || '10:00'}</Text>
-      </View>
 
       {/* 2. GRILLE DE KPIs ENRICHIE (4 Cartes Modernes) */}
       <View style={styles.kpiGrid}>
@@ -695,13 +703,40 @@ export default function AdminHomeScreen({ navigation }) {
       </View>
 
     </ScrollView>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
+  safeArea: {
+    flex: 1,
+    backgroundColor: '#FFFFFF',
+    paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight : 0,
+  },
+  fixedNavbar: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    paddingHorizontal: 16,
+    paddingTop: 10,
+    paddingBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E2E8F0',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 3,
+    elevation: 4,
+    zIndex: 100,
+  },
+  headerTitleCol: {
+    flex: 1,
+    marginRight: 10,
+  },
   container: {
     padding: 16,
-    paddingTop: 36,
+    paddingTop: 14,
     backgroundColor: '#F7FAFC',
     flexGrow: 1,
     paddingBottom: 40,
@@ -720,43 +755,37 @@ const styles = StyleSheet.create({
   },
 
   // EN-TÊTE
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: 14,
-  },
   brandRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 4,
+    marginBottom: 2,
   },
   shieldIconWrapper: {
-    backgroundColor: '#3182CE',
-    width: 20,
-    height: 20,
-    borderRadius: 10,
+    backgroundColor: '#1E40AF',
+    width: 18,
+    height: 18,
+    borderRadius: 9,
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 6,
   },
   badgeSystem: {
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: '700',
-    color: '#3182CE',
+    color: '#1E40AF',
     textTransform: 'uppercase',
     letterSpacing: 0.5,
   },
   title: {
-    fontSize: 24,
+    fontSize: 19,
     fontWeight: '800',
     color: '#1A365D',
-    letterSpacing: -0.5,
+    letterSpacing: -0.3,
   },
   subtitle: {
-    fontSize: 13,
+    fontSize: 11,
     color: '#718096',
-    marginTop: 2,
+    marginTop: 1,
   },
   headerActions: {
     flexDirection: 'row',
@@ -767,27 +796,27 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 10,
     paddingVertical: 7,
-    backgroundColor: '#EBF8FF',
+    backgroundColor: '#EFF6FF',
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: '#BEE3F8',
-    marginRight: 8,
+    borderColor: '#BFDBFE',
+    marginRight: 6,
   },
   profileBtnText: {
     fontSize: 12,
     fontWeight: 'bold',
-    color: '#3182CE',
+    color: '#1E40AF',
   },
   refreshBtn: {
-    padding: 9,
-    backgroundColor: '#EBF8FF',
+    padding: 8,
+    backgroundColor: '#EFF6FF',
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: '#BEE3F8',
-    marginRight: 8,
+    borderColor: '#BFDBFE',
+    marginRight: 6,
   },
   logoutButton: {
-    padding: 9,
+    padding: 8,
     backgroundColor: '#FFF5F5',
     borderRadius: 10,
     borderWidth: 1,

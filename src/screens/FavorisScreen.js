@@ -10,7 +10,10 @@ export default function FavorisScreen({ navigation }) {
   const fetchFavoris = async () => {
     setLoading(true);
     try {
-      if (!auth.currentUser) return;
+      if (!auth.currentUser) {
+        setFavoris([]);
+        return;
+      }
       const favSnapshot = await getDocs(collection(db, "users", auth.currentUser.uid, "favorites"));
       let list = [];
       favSnapshot.forEach((docSnap) => {
@@ -20,8 +23,9 @@ export default function FavorisScreen({ navigation }) {
     } catch (error) {
       console.error("Erreur chargement favoris :", error);
       Alert.alert("Erreur", "Impossible de charger vos favoris.");
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   useEffect(() => {
@@ -70,7 +74,7 @@ export default function FavorisScreen({ navigation }) {
   if (loading) {
     return (
       <View style={styles.loaderContainer}>
-        <ActivityIndicator size="large" color="#3182CE" />
+        <ActivityIndicator size="large" color="#1E40AF" />
       </View>
     );
   }
@@ -128,7 +132,7 @@ export default function FavorisScreen({ navigation }) {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F8F9FA', padding: 16 },
   loaderContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  title: { fontSize: 20, fontWeight: 'bold', color: '#1A365D', marginBottom: 16, marginTop: 10 },
+  title: { fontSize: 20, fontWeight: 'bold', color: '#1E40AF', marginBottom: 16, marginTop: 10 },
   emptyContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 20 },
   emptyText: { color: '#718096', textAlign: 'center', fontSize: 15 },
   card: { backgroundColor: '#fff', borderRadius: 10, marginBottom: 15, overflow: 'hidden', borderWidth: 1, borderColor: '#E2E8F0', position: 'relative' },
@@ -138,6 +142,6 @@ const styles = StyleSheet.create({
   cardTitle: { fontSize: 16, fontWeight: 'bold', color: '#2D3748', marginBottom: 4 },
   cardPrice: { fontSize: 15, fontWeight: 'bold', color: '#38A169', marginBottom: 4 },
   cardAddress: { fontSize: 13, color: '#718096', marginBottom: 10 },
-  contactBtn: { backgroundColor: '#3182CE', padding: 8, borderRadius: 6, alignItems: 'center' },
+  contactBtn: { backgroundColor: '#1E40AF', padding: 8, borderRadius: 6, alignItems: 'center' },
   contactBtnText: { color: '#fff', fontWeight: 'bold', fontSize: 13 },
 });
