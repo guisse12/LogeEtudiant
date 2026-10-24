@@ -50,7 +50,7 @@ export const registerUser = async (email, password, userData) => {
 // Connexion d'un utilisateur
 export const loginUser = async (email, password) => {
   try {
-    const userCredential = await signInWithEmailAndPassword(auth, email, password);
+    const userCredential = await signInWithEmailAndPassword(auth, email.trim(), password);
     const user = userCredential.user;
 
     // Vérification si l'e-mail a été confirmé par lien
@@ -59,6 +59,7 @@ export const loginUser = async (email, password) => {
       await signOut(auth);
       return { 
         success: false, 
+        emailNotVerified: true,
         error: "Veuillez confirmer votre compte via le lien envoyé par e-mail avant de vous connecter." 
       };
     }
@@ -77,6 +78,39 @@ export const loginUser = async (email, password) => {
       errorMessage = "Format d'email invalide.";
     }
 
+    return { success: false, error: errorMessage };
+  }
+};
+
+// Renvoi de l'e-mail de confirmation
+export const resendVerificationEmail = async (email, password) => {
+  try {
+    if (!email || !password) {
+      return { success: false, error: "Veuillez renseigner votre email et mot de passe pour renvoyer le lien." };
+    }
+    const userCredential = await signInWithEmailAndPassword(auth, email.trim(), password);
+    const user = userCredential.user;
+
+    if (user.emailVerified) {
+      await signOut(auth);
+      return { success: false, alreadyVerified: true, error: "Votre compte est déjà vérifié. Vous pouvez vous connecter normalement." };
+    }
+
+    await sendEmailVerification(user);
+    await signOut(auth);
+
+    return { 
+      success: true, 
+      message: "Un nouvel e-mail de confirmation vient de vous être envoyé. Vérifiez votre boîte de réception (et vos courriers indésirables / spams)." 
+    };
+  } catch (error) {
+    await signOut(auth).catch(() => {});
+    let errorMessage = "Impossible de renvoyer l'e-mail pour le moment.";
+    if (error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential') {
+      errorMessage = "Mot de passe incorrect pour renvoyer le lien de vérification.";
+    } else if (error.code === 'auth/too-many-requests') {
+      errorMessage = "Trop de tentatives récentes. Veuillez patienter quelques minutes avant de réessayer.";
+    }
     return { success: false, error: errorMessage };
   }
 };

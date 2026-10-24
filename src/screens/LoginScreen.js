@@ -1,27 +1,27 @@
 import React, { useState } from 'react';
 import { StyleSheet, Text, TextInput, TouchableOpacity, View, Alert, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { loginUser, resetPassword } from '../services/authService';
-import { sendEmailVerification } from 'firebase/auth';
-import { auth } from '../config/firebase';
+import { loginUser, resetPassword, resendVerificationEmail } from '../services/authService';
 
 export default function LoginScreen({ navigation }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [unverifiedUser, setUnverifiedUser] = useState(null); // Stocke l'utilisateur non vérifié pour le renvoi
+  const [emailNotVerified, setEmailNotVerified] = useState(false);
+  const [resendingEmail, setResendingEmail] = useState(false);
 
   const handleLogin = async () => {
-    if (!email || !password) {
+    const cleanEmail = email.trim();
+    if (!cleanEmail || !password) {
       Alert.alert('Erreur', 'Veuillez remplir tous les champs.');
       return;
     }
 
     setLoading(true);
-    setUnverifiedUser(null);
+    setEmailNotVerified(false);
     try {
-      const result = await loginUser(email, password);
+      const result = await loginUser(cleanEmail, password);
 
       if (result.success) {
         const role = result.userInfo?.role;
@@ -35,11 +35,19 @@ export default function LoginScreen({ navigation }) {
           navigation.replace('EtudiantHome');
         }
       } else {
-        // Si l'erreur concerne le compte non vérifié, on garde l'instance sous le coude pour proposer le renvoi
-        if (auth.currentUser && !auth.currentUser.emailVerified) {
-          setUnverifiedUser(auth.currentUser);
+        if (result.emailNotVerified) {
+          setEmailNotVerified(true);
+          Alert.alert(
+            'Compte non confirmé ✉️',
+            'Veuillez confirmer votre compte via le lien envoyé par e-mail avant de vous connecter.\n\nPensez à vérifier votre boîte de réception et vos courriers indésirables (spams).',
+            [
+              { text: 'Annuler', style: 'cancel' },
+              { text: 'Renvoyer le lien', onPress: handleResendVerification }
+            ]
+          );
+        } else {
+          Alert.alert('Erreur de connexion', result.error);
         }
-        Alert.alert('Erreur de connexion', result.error);
       }
     } catch (error) {
       Alert.alert('Erreur', 'Une erreur technique est survenue.');
@@ -49,23 +57,36 @@ export default function LoginScreen({ navigation }) {
   };
 
   const handleResendVerification = async () => {
-    if (!unverifiedUser) return;
+    const cleanEmail = email.trim();
+    if (!cleanEmail || !password) {
+      Alert.alert('Champs requis', 'Veuillez renseigner votre email et votre mot de passe pour renvoyer le lien de confirmation.');
+      return;
+    }
+
+    setResendingEmail(true);
     try {
-      await sendEmailVerification(unverifiedUser);
-      Alert.alert('Succès', 'Un nouvel e-mail de confirmation vient de vous être envoyé.');
+      const res = await resendVerificationEmail(cleanEmail, password);
+      if (res.success) {
+        Alert.alert('E-mail envoyé ✉️', res.message);
+      } else {
+        Alert.alert('Information', res.error);
+      }
     } catch (error) {
-      Alert.alert('Erreur', 'Impossible de renvoyer l\'e-mail pour le moment. Réessayez plus tard.');
+      Alert.alert('Erreur', 'Impossible de renvoyer l\'e-mail pour le moment.');
+    } finally {
+      setResendingEmail(false);
     }
   };
 
   const handleForgotPassword = async () => {
-    if (!email) {
+    const cleanEmail = email.trim();
+    if (!cleanEmail) {
       Alert.alert('Champ requis', 'Veuillez entrer votre adresse email ci-dessus pour réinitialiser votre mot de passe.');
       return;
     }
 
     try {
-      const result = await resetPassword(email);
+      const result = await resetPassword(cleanEmail);
       if (result.success) {
         Alert.alert('Succès', 'Un lien de réinitialisation a été envoyé à votre adresse email.');
       } else {
@@ -124,9 +145,17 @@ export default function LoginScreen({ navigation }) {
       </TouchableOpacity>
 
       {/* Bouton conditionnel si l'utilisateur n'a pas validé son e-mail */}
-      {unverifiedUser && (
-        <TouchableOpacity style={styles.resendButton} onPress={handleResendVerification}>
-          <Text style={styles.resendButtonText}>Renvoyer l'e-mail de confirmation</Text>
+      {emailNotVerified && (
+        <TouchableOpacity 
+          style={styles.resendButton} 
+          onPress={handleResendVerification}
+          disabled={resendingEmail}
+        >
+          {resendingEmail ? (
+            <ActivityIndicator color="#fff" size="small" />
+          ) : (
+            <Text style={styles.resendButtonText}>✉️ Renvoyer l'e-mail de confirmation</Text>
+          )}
         </TouchableOpacity>
       )}
       

@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { StyleSheet, Text, View, TextInput, TouchableOpacity, Alert, ScrollView, ActivityIndicator, Image } from 'react-native';
-import { createUserWithEmailAndPassword } from 'firebase/auth';
+import { createUserWithEmailAndPassword, sendEmailVerification, signOut } from 'firebase/auth';
 import { doc, setDoc } from 'firebase/firestore';
+import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { auth, db } from '../config/firebase';
 import { cleanRegistrationNames } from '../utils/nameFormatter';
@@ -9,6 +10,7 @@ import { cleanRegistrationNames } from '../utils/nameFormatter';
 export default function RegisterScreen({ navigation }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [nom, setNom] = useState('');
   const [prenom, setPrenom] = useState('');
   const [telephone, setTelephone] = useState('');
@@ -108,6 +110,11 @@ export default function RegisterScreen({ navigation }) {
       return;
     }
 
+    if (password.length < 6) {
+      Alert.alert("Mot de passe trop court", "Le mot de passe doit comporter au moins 6 caractères.");
+      return;
+    }
+
     const { prenom: finalPrenom, nom: finalNom, nomComplet: finalNomComplet } = cleanRegistrationNames(prenom, nom);
 
     if (role === 'bailleur' && justificatifsUris.length === 0) {
@@ -124,7 +131,14 @@ export default function RegisterScreen({ navigation }) {
       const userCredential = await createUserWithEmailAndPassword(auth, cleanEmail, password);
       const user = userCredential.user;
 
-      // 2. Enregistrement dans Firestore avec noms nettoyés
+      // 2. Envoi du lien de confirmation par e-mail
+      try {
+        await sendEmailVerification(user);
+      } catch (emailErr) {
+        console.warn("Erreur envoi email vérification :", emailErr);
+      }
+
+      // 3. Enregistrement dans Firestore avec noms nettoyés
       await setDoc(doc(db, "users", user.uid), {
         uid: user.uid,
         email: cleanEmail,
@@ -138,23 +152,32 @@ export default function RegisterScreen({ navigation }) {
         createdAt: new Date(),
       });
 
-      Alert.alert(
-        "Inscription réussie", 
-        role === 'bailleur' 
-          ? "Votre compte a été créé. Il est actuellement en attente de validation par l'administrateur." 
-          : "Votre compte étudiant a été créé avec succès !"
-      );
+      // 4. Déconnexion immédiate : l'utilisateur doit obligatoirement confirmer son email avant de pouvoir se connecter
+      await signOut(auth);
 
-      // Redirection selon le rôle
-      if (role === 'bailleur') {
-        navigation.replace('BailleurHome');
-      } else {
-        navigation.replace('EtudiantHome');
-      }
+      // 5. Message clair informant l'utilisateur
+      Alert.alert(
+        "Inscription réussie ✉️", 
+        `Un e-mail de confirmation a été envoyé à l'adresse :\n${cleanEmail}\n\n1. Ouvrez votre boîte mail (pensez à vérifier vos courriers indésirables / spams).\n2. Cliquez sur le lien pour valider votre compte.\n3. Connectez-vous ensuite à l'application.`,
+        [
+          {
+            text: "Se connecter",
+            onPress: () => navigation.replace('Login'),
+          }
+        ]
+      );
 
     } catch (error) {
       console.error("Erreur d'inscription :", error);
-      Alert.alert("Erreur", error.message);
+      let errorMsg = "Une erreur est survenue lors de l'inscription.";
+      if (error.code === 'auth/email-already-in-use') {
+        errorMsg = "Cette adresse e-mail est déjà utilisée par un autre compte.";
+      } else if (error.code === 'auth/invalid-email') {
+        errorMsg = "L'adresse e-mail saisie n'est pas valide.";
+      } else if (error.code === 'auth/weak-password') {
+        errorMsg = "Le mot de passe doit comporter au moins 6 caractères.";
+      }
+      Alert.alert("Erreur", errorMsg);
     } finally {
       setLoading(false);
     }
@@ -212,14 +235,29 @@ export default function RegisterScreen({ navigation }) {
         keyboardType="email-address" 
         autoCapitalize="none" 
       />
-      <TextInput 
-        style={styles.input} 
-        placeholder="Mot de passe" 
-        placeholderTextColor="#A0AEC0"
-        value={password} 
-        onChangeText={setPassword} 
-        secureTextEntry 
-      />
+
+      {/* Champ Mot de passe avec icône œil intégrée */}
+      <View style={styles.passwordContainer}>
+        <TextInput 
+          style={styles.passwordInput} 
+          placeholder="Mot de passe (6 caractères min)" 
+          placeholderTextColor="#A0AEC0"
+          value={password} 
+          onChangeText={setPassword} 
+          secureTextEntry={!showPassword} 
+        />
+        <TouchableOpacity 
+          onPress={() => setShowPassword(!showPassword)} 
+          style={styles.eyeIcon}
+          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+        >
+          <Ionicons 
+            name={showPassword ? "eye-off" : "eye"} 
+            size={22} 
+            color="#718096" 
+          />
+        </TouchableOpacity>
+      </View>
 
       {/* Section spécifique Bailleur */}
       {role === 'bailleur' && (
@@ -261,6 +299,19 @@ export default function RegisterScreen({ navigation }) {
           <Text style={styles.submitBtnText}>S'inscrire</Text>
         )}
       </TouchableOpacity>
+
+      {/* Lien vers Connexion */}
+      <View style={styles.loginLinkContainer}>
+        <Text style={styles.loginLinkText}>
+          Vous avez déjà un compte ?{' '}
+          <Text 
+            style={styles.loginLinkHighlight} 
+            onPress={() => navigation.replace('Login')}
+          >
+            Se connecter
+          </Text>
+        </Text>
+      </View>
     </ScrollView>
   );
 }
@@ -275,6 +326,37 @@ const styles = StyleSheet.create({
   roleText: { color: '#4A5568', fontWeight: 'bold', fontSize: 14 },
   roleTextActive: { color: '#fff' },
   input: { backgroundColor: '#fff', borderWidth: 1, borderColor: '#CBD5E0', padding: 12, borderRadius: 8, marginBottom: 12, fontSize: 14, color: '#2D3748' },
+  passwordContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#fff',
+    borderWidth: 1,
+    borderColor: '#CBD5E0',
+    borderRadius: 8,
+    marginBottom: 12,
+  },
+  passwordInput: {
+    flex: 1,
+    padding: 12,
+    fontSize: 14,
+    color: '#2D3748',
+  },
+  eyeIcon: {
+    paddingHorizontal: 12,
+  },
+  loginLinkContainer: {
+    alignItems: 'center',
+    marginTop: 20,
+    marginBottom: 20,
+  },
+  loginLinkText: {
+    color: '#718096',
+    fontSize: 14,
+  },
+  loginLinkHighlight: {
+    color: '#3182CE',
+    fontWeight: 'bold',
+  },
   bailleurSection: { backgroundColor: '#EBF8FF', borderWidth: 1, borderColor: '#BEE3F8', padding: 15, borderRadius: 8, marginBottom: 15 },
   bailleurSectionTitle: { fontSize: 15, fontWeight: 'bold', color: '#2B6CB0', marginBottom: 5 },
   bailleurDesc: { fontSize: 12, color: '#4A5568', marginBottom: 10, lineHeight: 18 },
