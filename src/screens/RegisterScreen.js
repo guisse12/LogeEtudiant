@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { 
   StyleSheet, 
   Text, 
@@ -21,59 +21,46 @@ import {
   sendPhoneVerificationCode, 
   verifyPhoneCode, 
   registerUserWithPhone,
-  cleanPhoneDigits 
+  cleanPhoneDigits,
+  isPhoneAlreadyRegistered 
 } from '../services/authService';
 
-export default function RegisterScreen({ navigation }) {
+export default function RegisterScreen({ navigation, route }) {
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [nom, setNom] = useState('');
   const [prenom, setPrenom] = useState('');
-  const [telephone, setTelephone] = useState('');
+  const [telephone, setTelephone] = useState(route?.params?.prefilledPhone || '');
   const [role, setRole] = useState('etudiant'); // 'etudiant' ou 'bailleur'
   const [justificatifsUris, setJustificatifsUris] = useState([]); // Jusqu'à 5 pièces
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (route?.params?.prefilledPhone) {
+      setTelephone(route.params.prefilledPhone);
+    }
+  }, [route?.params?.prefilledPhone]);
 
   // Modale de vérification par code SMS à 6 chiffres
   const [codeModalVisible, setCodeModalVisible] = useState(false);
   const [verificationCode, setVerificationCode] = useState('');
   const [expectedCode, setExpectedCode] = useState('');
+  const [demoCode, setDemoCode] = useState(null);
+  const [countdown, setCountdown] = useState(30);
   const [verifying, setVerifying] = useState(false);
   const [resendingCode, setResendingCode] = useState(false);
+  const otpInputRef = useRef(null);
 
-  // Animation Bannière SMS style Wave
-  const [smsBannerVisible, setSmsBannerVisible] = useState(false);
-  const [smsBannerCode, setSmsBannerCode] = useState('');
-  const bannerAnim = useRef(new Animated.Value(-120)).current;
-
-  const showWaveSmsBanner = (code) => {
-    setSmsBannerCode(code);
-    setSmsBannerVisible(true);
-    Animated.spring(bannerAnim, {
-      toValue: Platform.OS === 'ios' ? 45 : 20,
-      useNativeDriver: true,
-      friction: 6,
-    }).start();
-
-    setTimeout(() => {
-      hideWaveSmsBanner();
-    }, 9000);
-  };
-
-  const hideWaveSmsBanner = () => {
-    Animated.timing(bannerAnim, {
-      toValue: -140,
-      duration: 300,
-      useNativeDriver: true,
-    }).start(() => setSmsBannerVisible(false));
-  };
-
-  const handleBannerTap = () => {
-    if (smsBannerCode) {
-      setVerificationCode(smsBannerCode);
+  // Compte à rebours automatique pour le renvoi de SMS
+  useEffect(() => {
+    let timer;
+    if (codeModalVisible && countdown > 0) {
+      timer = setInterval(() => {
+        setCountdown((prev) => (prev > 0 ? prev - 1 : 0));
+      }, 1000);
     }
-    hideWaveSmsBanner();
-  };
+    return () => clearInterval(timer);
+  }, [codeModalVisible, countdown]);
 
   // Choix Appareil photo ou Galerie pour le bailleur
   const handleAddJustificatif = () => {
@@ -152,12 +139,12 @@ export default function RegisterScreen({ navigation }) {
     setJustificatifsUris(prev => prev.filter((_, index) => index !== indexToRemove));
   };
 
-  // Étape 1 : Valider les champs et envoyer le code de confirmation SMS style Wave
+  // Étape 1 : Valider les champs et envoyer le code de confirmation par message
   const handleInitiateRegister = async () => {
     const cleanPhone = cleanPhoneDigits(telephone);
 
     if (!cleanPhone || cleanPhone.length !== 9) {
-      Alert.alert("Numéro de téléphone invalide", "Le numéro de téléphone doit comporter exactement 9 chiffres.");
+      Alert.alert("Numéro de téléphone invalide", "Le numéro de téléphone doit comporter exactement 9 chiffres (ex: 77 123 45 67).");
       return;
     }
 
@@ -186,18 +173,53 @@ export default function RegisterScreen({ navigation }) {
 
     setLoading(true);
     try {
+      // 1. Contrôle strict d'unicité : 1 numéro de téléphone = 1 et 1 seul compte Logetu
+      const checkResult = await isPhoneAlreadyRegistered(cleanPhone);
+      
+      if (checkResult.networkError) {
+        Alert.alert("Connexion impossible", "Veuillez vérifier votre connexion Internet puis réessayer.");
+        setLoading(false);
+        return;
+      }
+
+      if (checkResult.registered) {
+        setLoading(false);
+        Alert.alert(
+          "Numéro déjà enregistré",
+          `Le numéro +221 ${cleanPhone} est déjà associé à un compte Logetu.\n\nChaque numéro de téléphone ne peut avoir qu'un seul et unique compte.`,
+          [
+            {
+              text: "Se connecter",
+              onPress: () => navigation.navigate('Login', { prefilledPhone: cleanPhone }),
+            },
+            {
+              text: "Modifier le numéro",
+              style: "cancel",
+            }
+          ]
+        );
+        return;
+      }
+
+      // 2. Envoi du code SMS de vérification
       const res = await sendPhoneVerificationCode(cleanPhone, 'inscription');
       if (res.success) {
         setExpectedCode(res.code);
         setVerificationCode('');
+        setDemoCode(!res.delivered ? res.code : null);
+        setCountdown(30);
         setCodeModalVisible(true);
-        // Déclencher le message SMS direct style Wave
-        showWaveSmsBanner(res.code);
+        setTimeout(() => otpInputRef.current?.focus(), 350);
       } else {
-        Alert.alert("Erreur", res.error || "Impossible d'envoyer le code.");
+        if (res.errorType === 'NETWORK_ERROR') {
+          Alert.alert("Connexion impossible", "Veuillez vérifier votre connexion Internet.");
+        } else {
+          Alert.alert("Erreur", res.error || "Impossible d'envoyer le code.");
+        }
       }
     } catch (err) {
-      Alert.alert("Erreur", "Une erreur est survenue lors de l'envoi du code.");
+      console.error("Erreur register initiate :", err);
+      Alert.alert("Erreur", "Une erreur est survenue lors de l'envoi du code. Veuillez vérifier votre connexion Internet.");
     } finally {
       setLoading(false);
     }
@@ -242,30 +264,51 @@ export default function RegisterScreen({ navigation }) {
           [
             {
               text: "Se connecter",
-              onPress: () => navigation.replace('Login'),
+              onPress: () => navigation.replace('Login', { prefilledPhone: cleanPhone }),
             }
           ]
         );
       } else {
-        Alert.alert("Erreur création", result.error || "Impossible de finaliser l'inscription.");
+        if (result.errorType === 'PHONE_EXISTS') {
+          Alert.alert(
+            "Compte déjà existant",
+            "Ce numéro de téléphone est déjà associé à un compte. Veuillez vous connecter.",
+            [
+              {
+                text: "Se connecter",
+                onPress: () => {
+                  setCodeModalVisible(false);
+                  navigation.replace('Login', { prefilledPhone: cleanPhone });
+                }
+              }
+            ]
+          );
+        } else if (result.errorType === 'NETWORK_ERROR') {
+          Alert.alert("Connexion impossible", "Veuillez vérifier votre connexion Internet puis réessayer.");
+        } else {
+          Alert.alert("Erreur création", result.error || "Impossible de finaliser l'inscription.");
+        }
       }
     } catch (error) {
       console.error("Erreur inscription :", error);
-      Alert.alert("Erreur", "Une erreur technique est survenue.");
+      Alert.alert("Erreur", "Une erreur technique est survenue. Veuillez vérifier votre connexion.");
     } finally {
       setVerifying(false);
     }
   };
 
-  // Renvoyer le code SMS style Wave si non reçu
+  // Renvoyer le code par message si non reçu
   const handleResendCode = async () => {
+    if (countdown > 0) return;
     const cleanPhone = cleanPhoneDigits(telephone);
     setResendingCode(true);
     try {
       const res = await sendPhoneVerificationCode(cleanPhone, 'inscription');
       if (res.success) {
         setExpectedCode(res.code);
-        showWaveSmsBanner(res.code);
+        setVerificationCode('');
+        setDemoCode(!res.delivered ? res.code : null);
+        setCountdown(30);
       }
     } catch (e) {
       Alert.alert("Erreur", "Impossible de renvoyer le code.");
@@ -279,35 +322,6 @@ export default function RegisterScreen({ navigation }) {
       behavior={Platform.OS === 'ios' ? 'padding' : undefined} 
       style={{ flex: 1 }}
     >
-      {/* BANNIÈRE SMS DIRECTE FLOTTANTE STYLE WAVE */}
-      {smsBannerVisible && (
-        <Animated.View 
-          style={[
-            styles.waveSmsBanner,
-            { transform: [{ translateY: bannerAnim }] }
-          ]}
-        >
-          <TouchableOpacity 
-            style={styles.waveSmsContent} 
-            onPress={handleBannerTap}
-            activeOpacity={0.9}
-          >
-            <View style={styles.waveSmsHeader}>
-              <View style={styles.waveAppBadge}>
-                <Ionicons name="chatbubble-ellipses" size={14} color="#FFFFFF" />
-              </View>
-              <Text style={styles.waveSenderTitle}>MESSAGE • LogeÉtudiant</Text>
-              <Text style={styles.waveTimeText}>À l'instant</Text>
-            </View>
-
-            <Text style={styles.waveBodyText}>
-              Votre code de confirmation LogeÉtudiant est : <Text style={styles.waveCodeHighlight}>{smsBannerCode}</Text>. Ne le partagez avec personne.
-            </Text>
-            <Text style={styles.waveTapHint}>👉 Touchez pour copier et insérer le code</Text>
-          </TouchableOpacity>
-        </Animated.View>
-      )}
-
       <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
         
         {/* LOGO PARFAITEMENT DÉTOURÉ & AGRANDI EN HAUTE DÉFINITION */}
@@ -320,7 +334,7 @@ export default function RegisterScreen({ navigation }) {
         </View>
 
         <Text style={styles.title}>Créer un compte</Text>
-        <Text style={styles.subtitle}>Rejoignez la communauté LogeÉtudiant Sénégal</Text>
+        <Text style={styles.subtitle}>Rejoignez la communauté Logetu Sénégal</Text>
 
         {/* SÉLECTEUR DE RÔLE MODERNE */}
         <View style={styles.roleContainer}>
@@ -338,7 +352,7 @@ export default function RegisterScreen({ navigation }) {
             <Text style={[styles.roleText, role === 'etudiant' && styles.roleTextActive]}>Étudiant</Text>
           </TouchableOpacity>
           <TouchableOpacity 
-            style={[styles.roleButton, role === 'bailleur' && styles.roleActive]}
+            style={[styles.roleButton, role === 'bailleur' && { backgroundColor: '#E8A008' }]}
             onPress={() => setRole('bailleur')}
             activeOpacity={0.8}
           >
@@ -354,7 +368,7 @@ export default function RegisterScreen({ navigation }) {
 
         {/* CHAMP PRÉNOM */}
         <View style={styles.inputContainer}>
-          <Ionicons name="person-outline" size={19} color="#1E40AF" style={styles.inputIcon} />
+          <Ionicons name="person-outline" size={19} color="#003880" style={styles.inputIcon} />
           <TextInput 
             style={styles.inputField} 
             placeholder="Prénom" 
@@ -367,7 +381,7 @@ export default function RegisterScreen({ navigation }) {
 
         {/* CHAMP NOM */}
         <View style={styles.inputContainer}>
-          <Ionicons name="person-outline" size={19} color="#1E40AF" style={styles.inputIcon} />
+          <Ionicons name="person-outline" size={19} color="#003880" style={styles.inputIcon} />
           <TextInput 
             style={styles.inputField} 
             placeholder="Nom" 
@@ -380,7 +394,7 @@ export default function RegisterScreen({ navigation }) {
 
         {/* CHAMP NUMÉRO DE TÉLÉPHONE (9 CHIFFRES UNIQUEMENT) */}
         <View style={styles.inputContainer}>
-          <Ionicons name="call-outline" size={19} color="#1E40AF" style={styles.inputIcon} />
+          <Ionicons name="call-outline" size={19} color="#003880" style={styles.inputIcon} />
           <TextInput 
             style={styles.inputField} 
             placeholder="Numéro de téléphone" 
@@ -394,7 +408,7 @@ export default function RegisterScreen({ navigation }) {
 
         {/* CHAMP MOT DE PASSE (6 CHIFFRES AVEC ŒIL) */}
         <View style={styles.passwordContainer}>
-          <Ionicons name="lock-closed-outline" size={19} color="#1E40AF" style={styles.inputIcon} />
+          <Ionicons name="lock-closed-outline" size={19} color="#003880" style={styles.inputIcon} />
           <TextInput 
             style={styles.passwordInput} 
             placeholder="Mot de passe (6 chiffres)" 
@@ -422,7 +436,7 @@ export default function RegisterScreen({ navigation }) {
         {role === 'bailleur' && (
           <View style={styles.bailleurCard}>
             <View style={styles.bailleurHeader}>
-              <Ionicons name="shield-checkmark-outline" size={20} color="#1E40AF" style={{ marginRight: 6 }} />
+              <Ionicons name="shield-checkmark-outline" size={20} color="#003880" style={{ marginRight: 6 }} />
               <Text style={styles.bailleurTitle}>Vérification du profil Bailleur</Text>
             </View>
             <Text style={styles.bailleurDesc}>
@@ -483,81 +497,137 @@ export default function RegisterScreen({ navigation }) {
 
       </ScrollView>
 
-      {/* MODALE DE VÉRIFICATION DU CODE SMS À 6 CHIFFRES */}
-      <Modal visible={codeModalVisible} animationType="slide" transparent={true}>
-        <View style={styles.modalOverlay}>
+      {/* MODALE DE VÉRIFICATION DU CODE SMS ULTRA-PROFESSIONNELLE */}
+      <Modal 
+        visible={codeModalVisible} 
+        animationType="slide" 
+        transparent={true}
+        onRequestClose={() => setCodeModalVisible(false)}
+      >
+        <KeyboardAvoidingView 
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined} 
+          style={styles.modalOverlay}
+        >
           <View style={styles.modalCard}>
             <View style={styles.modalBar} />
 
-            <View style={styles.modalHeaderRow}>
-              <View style={styles.modalIconBox}>
-                <Ionicons name="phone-portrait-outline" size={24} color="#1E40AF" />
+            <View style={styles.modalTopRow}>
+              <View style={styles.modalBadgeCircle}>
+                <Ionicons name="shield-checkmark" size={26} color="#003880" />
               </View>
               <TouchableOpacity 
-                style={styles.modalCloseBtn} 
+                style={styles.modalCloseTopRight} 
                 onPress={() => setCodeModalVisible(false)}
+                hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
               >
-                <Ionicons name="close" size={20} color="#64748B" />
+                <Ionicons name="close" size={22} color="#64748B" />
               </TouchableOpacity>
             </View>
 
-            <Text style={styles.modalTitle}>Confirmation du compte</Text>
-            <Text style={styles.modalDesc}>
-              Un code à 6 chiffres a été envoyé au <Text style={{ fontWeight: 'bold' }}>{telephone}</Text>. Saisissez-le ci-dessous pour activer votre compte.
+            <Text style={styles.modalTitleCentered}>Vérification du compte</Text>
+            <Text style={styles.modalDescCentered}>
+              Saisissez le code à 6 chiffres envoyé au{'\n'}
+              <Text style={styles.phoneHighlight}>+221 {telephone}</Text>
             </Text>
 
-            {/* CHAMP CODE À 6 CHIFFRES */}
-            <View style={[styles.inputContainer, { marginTop: 8 }]}>
-              <Ionicons name="shield-checkmark-outline" size={20} color="#1E40AF" style={styles.inputIcon} />
+            {/* 6 CELLULES DU CODE PIN OTP ULTRA-PROFESSIONNEL */}
+            <TouchableOpacity 
+              style={styles.otpContainer} 
+              activeOpacity={1} 
+              onPress={() => otpInputRef.current?.focus()}
+            >
               <TextInput
-                style={[styles.inputField, { letterSpacing: 8, fontSize: 20, fontWeight: 'bold', textAlign: 'center' }]}
-                placeholder="208341"
-                placeholderTextColor="#94A3B8"
+                ref={otpInputRef}
                 value={verificationCode}
-                onChangeText={setVerificationCode}
+                onChangeText={(txt) => {
+                  const clean = txt.replace(/[^0-9]/g, '').slice(0, 6);
+                  setVerificationCode(clean);
+                }}
                 keyboardType="number-pad"
                 maxLength={6}
+                style={styles.hiddenInput}
                 autoFocus={true}
               />
+              {[0, 1, 2, 3, 4, 5].map((i) => {
+                const char = verificationCode[i] || '';
+                const isCurrent = verificationCode.length === i;
+                const isFilled = char !== '';
+                return (
+                  <View 
+                    key={i} 
+                    style={[
+                      styles.otpCell,
+                      isCurrent && styles.otpCellActive,
+                      isFilled && styles.otpCellFilled
+                    ]}
+                  >
+                    <Text style={styles.otpCellText}>{char}</Text>
+                  </View>
+                );
+              })}
+            </TouchableOpacity>
+
+            {/* BADGE CODE DÉMO DISCRET EN MODE ATTENTE PASSERELLE */}
+            {demoCode ? (
+              <TouchableOpacity 
+                style={styles.demoCodePill}
+                onPress={() => setVerificationCode(demoCode)}
+                activeOpacity={0.8}
+              >
+                <Ionicons name="sparkles" size={14} color="#E8A008" style={{ marginRight: 6 }} />
+                <Text style={styles.demoCodeText}>
+                  Code reçu : <Text style={styles.demoCodeBold}>{demoCode}</Text>  (Toucher pour insérer)
+                </Text>
+              </TouchableOpacity>
+            ) : null}
+
+            {/* COMPTE À REBOURS / RENVOYER UN NOUVEAU CODE */}
+            <View style={styles.resendRow}>
+              {countdown > 0 ? (
+                <Text style={styles.countdownText}>
+                  Renvoyer un nouveau code dans <Text style={styles.countdownNumber}>{countdown}s</Text>
+                </Text>
+              ) : (
+                <TouchableOpacity 
+                  onPress={handleResendCode}
+                  disabled={resendingCode}
+                  activeOpacity={0.7}
+                >
+                  <Text style={styles.resendActiveText}>
+                    {resendingCode ? "Envoi en cours..." : "Renvoyer un nouveau code"}
+                  </Text>
+                </TouchableOpacity>
+              )}
             </View>
 
             {/* BOUTON CONFIRMER LE CODE */}
             <TouchableOpacity 
-              style={styles.modalActionBtn} 
+              style={[
+                styles.modalConfirmBtn, 
+                verificationCode.length === 6 ? styles.modalConfirmBtnActive : styles.modalConfirmBtnDisabled
+              ]} 
               onPress={handleConfirmCodeAndRegister}
-              disabled={verifying}
+              disabled={verifying || verificationCode.length !== 6}
               activeOpacity={0.85}
             >
               {verifying ? (
                 <ActivityIndicator color="#fff" />
               ) : (
-                <Text style={styles.modalActionBtnText}>Confirmer et activer mon compte</Text>
-              )}
-            </TouchableOpacity>
-
-            {/* BOUTON RENVOYER LE CODE */}
-            <TouchableOpacity 
-              style={{ alignSelf: 'center', marginTop: 12, padding: 6 }} 
-              onPress={handleResendCode}
-              disabled={resendingCode}
-            >
-              {resendingCode ? (
-                <ActivityIndicator color="#1E40AF" size="small" />
-              ) : (
-                <Text style={{ color: '#1E40AF', fontSize: 13, fontWeight: '700' }}>
-                  Renvoyer un nouveau code
-                </Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}>
+                  <Text style={styles.modalConfirmBtnText}>Confirmer et activer mon compte</Text>
+                  <Ionicons name="checkmark-circle" size={18} color="#fff" style={{ marginLeft: 6 }} />
+                </View>
               )}
             </TouchableOpacity>
 
             <TouchableOpacity 
-              style={styles.modalCancelBtn} 
+              style={styles.modalCancelLink} 
               onPress={() => setCodeModalVisible(false)}
             >
-              <Text style={styles.modalCancelBtnText}>Annuler</Text>
+              <Text style={styles.modalCancelLinkText}>Modifier le numéro de téléphone</Text>
             </TouchableOpacity>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
 
     </KeyboardAvoidingView>
@@ -585,13 +655,14 @@ const styles = StyleSheet.create({
   title: { 
     fontSize: 26, 
     fontWeight: '800', 
-    color: '#0F172A', 
+    color: '#003880', // Bleu officiel de l'application
     textAlign: 'center', 
     marginBottom: 4 
   },
   subtitle: { 
-    fontSize: 14, 
-    color: '#64748B', 
+    fontSize: 13, 
+    color: '#E8A008', // Ocre doré officiel du logo
+    fontWeight: '700',
     textAlign: 'center', 
     marginBottom: 20 
   },
@@ -611,8 +682,8 @@ const styles = StyleSheet.create({
     borderRadius: 10,
   },
   roleActive: { 
-    backgroundColor: '#1E40AF',
-    shadowColor: '#1E40AF',
+    backgroundColor: '#003880',
+    shadowColor: '#003880',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.25,
     shadowRadius: 4,
@@ -690,7 +761,7 @@ const styles = StyleSheet.create({
   bailleurTitle: { 
     fontSize: 15, 
     fontWeight: '800', 
-    color: '#1E40AF', 
+    color: '#003880', 
   },
   bailleurDesc: { 
     fontSize: 12, 
@@ -700,7 +771,7 @@ const styles = StyleSheet.create({
   },
   filePickerBtn: { 
     flexDirection: 'row',
-    backgroundColor: '#1E40AF',
+    backgroundColor: '#003880',
     paddingVertical: 10, 
     borderRadius: 8, 
     alignItems: 'center', 
@@ -738,12 +809,12 @@ const styles = StyleSheet.create({
     alignItems: 'center' 
   },
   submitBtn: { 
-    backgroundColor: '#1E40AF',
+    backgroundColor: '#003880',
     paddingVertical: 15, 
     borderRadius: 12, 
     alignItems: 'center', 
     marginTop: 6,
-    shadowColor: '#1E40AF',
+    shadowColor: '#003880',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.25,
     shadowRadius: 6,
@@ -769,152 +840,206 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
   loginLinkHighlight: {
-    color: '#1E40AF',
-    fontWeight: '700',
+    color: '#E8A008', // Ocre doré officiel du logo
+    fontWeight: '800',
   },
 
-  /* Notification SMS style Wave */
-  waveSmsBanner: {
-    position: 'absolute',
-    top: 0,
-    left: 14,
-    right: 14,
-    zIndex: 9999,
-    backgroundColor: '#0F172A',
-    borderRadius: 16,
-    padding: 14,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.28,
-    shadowRadius: 12,
-    elevation: 12,
-    borderWidth: 1,
-    borderColor: '#334155',
-  },
-  waveSmsContent: {},
-  waveSmsHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 6,
-  },
-  waveAppBadge: {
-    backgroundColor: '#1E40AF',
-    width: 24,
-    height: 24,
-    borderRadius: 6,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 8,
-  },
-  waveSenderTitle: {
-    fontSize: 12,
-    fontWeight: '800',
-    color: '#F8FAFC',
-    flex: 1,
-    letterSpacing: 0.5,
-  },
-  waveTimeText: {
-    fontSize: 11,
-    color: '#94A3B8',
-  },
-  waveBodyText: {
-    fontSize: 13,
-    color: '#E2E8F0',
-    lineHeight: 18,
-  },
-  waveCodeHighlight: {
-    fontSize: 15,
-    fontWeight: '800',
-    color: '#60A5FA',
-    letterSpacing: 1.5,
-  },
-  waveTapHint: {
-    fontSize: 11,
-    color: '#94A3B8',
-    marginTop: 4,
-    fontStyle: 'italic',
-  },
-
-  /* Modale Code 6 chiffres */
+  /* Modale Code 6 chiffres Ultra-Professionnelle */
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(15, 23, 42, 0.6)',
+    backgroundColor: 'rgba(15, 23, 42, 0.65)',
     justifyContent: 'flex-end',
   },
   modalCard: {
     backgroundColor: '#FFFFFF',
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    padding: 24,
-    paddingBottom: Platform.OS === 'ios' ? 40 : 24,
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    paddingHorizontal: 22,
+    paddingTop: 12,
+    paddingBottom: Platform.OS === 'ios' ? 40 : 26,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: -4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 10,
-    elevation: 10,
+    shadowOffset: { width: 0, height: -6 },
+    shadowOpacity: 0.12,
+    shadowRadius: 12,
+    elevation: 12,
   },
   modalBar: {
-    width: 40,
+    width: 36,
     height: 4,
-    backgroundColor: '#E2E8F0',
+    backgroundColor: '#CBD5E1',
     borderRadius: 2,
     alignSelf: 'center',
-    marginBottom: 16,
-  },
-  modalHeaderRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
     marginBottom: 12,
   },
-  modalIconBox: {
-    width: 44,
-    height: 44,
-    borderRadius: 12,
+  modalTopRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    position: 'relative',
+    marginBottom: 12,
+  },
+  modalBadgeCircle: {
+    width: 54,
+    height: 54,
+    borderRadius: 27,
     backgroundColor: '#EFF6FF',
     justifyContent: 'center',
     alignItems: 'center',
+    borderWidth: 1.5,
+    borderColor: '#BFDBFE',
   },
-  modalCloseBtn: {
+  modalCloseTopRight: {
+    position: 'absolute',
+    right: 0,
+    top: 4,
     padding: 6,
   },
-  modalTitle: {
+  modalTitleCentered: {
     fontSize: 20,
     fontWeight: '800',
     color: '#0F172A',
+    textAlign: 'center',
     marginBottom: 6,
   },
-  modalDesc: {
-    fontSize: 14,
+  modalDescCentered: {
+    fontSize: 13,
     color: '#64748B',
-    lineHeight: 20,
-    marginBottom: 16,
+    lineHeight: 19,
+    textAlign: 'center',
+    marginBottom: 8,
   },
-  modalActionBtn: {
-    backgroundColor: '#1E40AF',
+  phoneHighlight: {
+    fontWeight: '800',
+    color: '#003880',
+    fontSize: 14,
+  },
+
+  /* 6 Cellules OTP Pin */
+  otpContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginVertical: 14,
+    paddingHorizontal: 4,
+  },
+  hiddenInput: {
+    position: 'absolute',
+    opacity: 0,
+    width: 1,
+    height: 1,
+  },
+  otpCell: {
+    width: 46,
+    height: 54,
+    borderRadius: 12,
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1.5,
+    borderColor: '#E2E8F0',
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 2,
+    elevation: 1,
+  },
+  otpCellActive: {
+    borderColor: '#003880',
+    backgroundColor: '#FFFFFF',
+    borderWidth: 2,
+    shadowColor: '#003880',
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  otpCellFilled: {
+    borderColor: '#003880',
+    backgroundColor: '#F0F7FF',
+  },
+  otpCellText: {
+    fontSize: 22,
+    fontWeight: '800',
+    color: '#003880',
+  },
+
+  /* Code démo */
+  demoCodePill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#FFFBEB',
+    borderWidth: 1,
+    borderColor: '#FDE68A',
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 20,
+    alignSelf: 'center',
+    marginBottom: 8,
+  },
+  demoCodeText: {
+    fontSize: 12,
+    color: '#92400E',
+    fontWeight: '600',
+  },
+  demoCodeBold: {
+    fontWeight: '800',
+    color: '#B45309',
+    fontSize: 13,
+  },
+
+  /* Compte à rebours renvoi */
+  resendRow: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 16,
+    marginTop: 4,
+  },
+  countdownText: {
+    fontSize: 13,
+    color: '#94A3B8',
+    fontWeight: '500',
+  },
+  countdownNumber: {
+    color: '#003880',
+    fontWeight: '700',
+  },
+  resendActiveText: {
+    fontSize: 13,
+    color: '#E8A008',
+    fontWeight: '800',
+  },
+
+  /* Bouton confirmation */
+  modalConfirmBtn: {
     paddingVertical: 14,
     borderRadius: 12,
     alignItems: 'center',
-    marginTop: 10,
-    shadowColor: '#1E40AF',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-    elevation: 2,
+    justifyContent: 'center',
   },
-  modalActionBtnText: {
+  modalConfirmBtnActive: {
+    backgroundColor: '#003880',
+    shadowColor: '#003880',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.25,
+    shadowRadius: 5,
+    elevation: 3,
+  },
+  modalConfirmBtnDisabled: {
+    backgroundColor: '#CBD5E1',
+  },
+  modalConfirmBtnText: {
     color: '#FFFFFF',
     fontSize: 15,
-    fontWeight: '700',
+    fontWeight: '800',
   },
-  modalCancelBtn: {
+  modalCancelLink: {
     paddingVertical: 12,
     alignItems: 'center',
-    marginTop: 6,
+    marginTop: 4,
   },
-  modalCancelBtnText: {
+  modalCancelLinkText: {
     color: '#64748B',
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '600',
   },
 });

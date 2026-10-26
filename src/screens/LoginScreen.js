@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { 
   StyleSheet, 
   Text, 
@@ -20,14 +20,22 @@ import {
   loginUser, 
   sendPhoneVerificationCode, 
   verifyPhoneCode, 
-  resetPasswordWithPhone 
+  resetPasswordWithPhone,
+  isPhoneAlreadyRegistered,
+  cleanPhoneDigits
 } from '../services/authService';
 
-export default function LoginScreen({ navigation }) {
-  const [identifier, setIdentifier] = useState(''); // Email ou Numéro de téléphone
+export default function LoginScreen({ navigation, route }) {
+  const [identifier, setIdentifier] = useState(route?.params?.prefilledPhone || ''); // Numéro de téléphone (9 chiffres)
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (route?.params?.prefilledPhone) {
+      setIdentifier(route.params.prefilledPhone);
+    }
+  }, [route?.params?.prefilledPhone]);
 
   // Modale personnalisée Mot de passe oublié
   const [forgotModalVisible, setForgotModalVisible] = useState(false);
@@ -35,49 +43,28 @@ export default function LoginScreen({ navigation }) {
   const [forgotStep, setForgotStep] = useState(1); // 1 = Saisie, 2 = Code 6 chiffres + Nouveau mot de passe
   const [forgotCode, setForgotCode] = useState('');
   const [expectedForgotCode, setExpectedForgotCode] = useState('');
+  const [forgotDemoCode, setForgotDemoCode] = useState(null);
+  const [forgotCountdown, setForgotCountdown] = useState(30);
   const [newPassword, setNewPassword] = useState('');
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [forgotLoading, setForgotLoading] = useState(false);
+  const forgotOtpRef = useRef(null);
 
-  // Animation Bannière SMS style Wave
-  const [smsBannerVisible, setSmsBannerVisible] = useState(false);
-  const [smsBannerCode, setSmsBannerCode] = useState('');
-  const bannerAnim = useRef(new Animated.Value(-120)).current;
-
-  const showWaveSmsBanner = (code) => {
-    setSmsBannerCode(code);
-    setSmsBannerVisible(true);
-    Animated.spring(bannerAnim, {
-      toValue: Platform.OS === 'ios' ? 45 : 20,
-      useNativeDriver: true,
-      friction: 6,
-    }).start();
-
-    // Fermeture automatique après 9 secondes
-    setTimeout(() => {
-      hideWaveSmsBanner();
-    }, 9000);
-  };
-
-  const hideWaveSmsBanner = () => {
-    Animated.timing(bannerAnim, {
-      toValue: -140,
-      duration: 300,
-      useNativeDriver: true,
-    }).start(() => setSmsBannerVisible(false));
-  };
-
-  const handleBannerTap = () => {
-    if (smsBannerCode) {
-      setForgotCode(smsBannerCode);
+  // Compte à rebours automatique
+  useEffect(() => {
+    let timer;
+    if (forgotModalVisible && forgotStep === 2 && forgotCountdown > 0) {
+      timer = setInterval(() => {
+        setForgotCountdown((prev) => (prev > 0 ? prev - 1 : 0));
+      }, 1000);
     }
-    hideWaveSmsBanner();
-  };
+    return () => clearInterval(timer);
+  }, [forgotModalVisible, forgotStep, forgotCountdown]);
 
   const handleLogin = async () => {
     const cleanId = identifier.trim();
     if (!cleanId || !password) {
-      Alert.alert('Champs requis', 'Veuillez saisir votre email (ou numéro de téléphone) et votre mot de passe.');
+      Alert.alert('Champs requis', 'Veuillez saisir votre numéro de téléphone et votre mot de passe.');
       return;
     }
 
@@ -106,37 +93,121 @@ export default function LoginScreen({ navigation }) {
           navigation.replace('EtudiantHome');
         }
       } else {
-        Alert.alert('Connexion impossible', result.error || 'Identifiant ou mot de passe incorrect.');
+        if (result.errorType === 'NO_ACCOUNT') {
+          Alert.alert(
+            "Compte introuvable",
+            result.error || "Aucun compte n'est associé à ce numéro de téléphone. Veuillez d'abord vous inscrire.",
+            [
+              { 
+                text: "S'inscrire", 
+                onPress: () => navigation.navigate('Register', { prefilledPhone: cleanPhoneDigits(cleanId) }) 
+              },
+              { text: "Annuler", style: "cancel" }
+            ]
+          );
+        } else if (result.errorType === 'NETWORK_ERROR') {
+          Alert.alert(
+            "Connexion impossible",
+            result.error || "Veuillez vérifier votre connexion Internet puis réessayer."
+          );
+        } else if (result.errorType === 'WRONG_PASSWORD') {
+          Alert.alert(
+            "Mot de passe incorrect",
+            result.error || "Le mot de passe saisi est incorrect.",
+            [
+              { 
+                text: "Mot de passe oublié ?", 
+                onPress: () => {
+                  setForgotId(cleanPhoneDigits(cleanId));
+                  setForgotModalVisible(true);
+                } 
+              },
+              { text: "Réessayer", style: "cancel" }
+            ]
+          );
+        } else {
+          Alert.alert('Connexion impossible', result.error || 'Numéro de téléphone ou mot de passe incorrect.');
+        }
       }
     } catch (error) {
       console.error("Erreur login :", error);
-      Alert.alert('Erreur', 'Une erreur technique est survenue.');
+      Alert.alert('Erreur', 'Une erreur technique est survenue. Veuillez vérifier votre connexion Internet.');
     } finally {
       setLoading(false);
     }
   };
 
-  // Étape 1 : Envoi du code SMS style Wave pour mot de passe oublié
+  // Étape 1 : Envoi du code par message pour mot de passe oublié
   const handleSendForgotCode = async () => {
     const clean = forgotId.trim();
     if (!clean) {
-      Alert.alert('Champ requis', 'Veuillez saisir votre numéro de téléphone ou adresse email.');
+      Alert.alert('Champ requis', 'Veuillez saisir votre numéro de téléphone.');
       return;
     }
 
     setForgotLoading(true);
     try {
+      // Vérifier si le compte existe avant d'envoyer le code
+      const check = await isPhoneAlreadyRegistered(clean);
+      if (check.networkError) {
+        Alert.alert("Connexion impossible", "Veuillez vérifier votre connexion Internet puis réessayer.");
+        setForgotLoading(false);
+        return;
+      }
+      if (!check.registered) {
+        setForgotLoading(false);
+        Alert.alert(
+          "Compte introuvable",
+          "Aucun compte n'est associé à ce numéro de téléphone. Veuillez d'abord vous inscrire.",
+          [
+            { 
+              text: "S'inscrire", 
+              onPress: () => {
+                setForgotModalVisible(false);
+                navigation.navigate('Register', { prefilledPhone: cleanPhoneDigits(clean) });
+              } 
+            },
+            { text: "Annuler", style: "cancel" }
+          ]
+        );
+        return;
+      }
+
       const res = await sendPhoneVerificationCode(clean, 'recuperation');
       if (res.success) {
         setExpectedForgotCode(res.code);
+        setForgotDemoCode(!res.delivered ? res.code : null);
+        setForgotCountdown(30);
+        setForgotCode('');
         setForgotStep(2);
-        // Déclencher la notification SMS directe style Wave
-        showWaveSmsBanner(res.code);
+        setTimeout(() => forgotOtpRef.current?.focus(), 350);
       } else {
-        Alert.alert('Erreur', res.error || 'Impossible d\'envoyer le code.');
+        if (res.errorType === 'NETWORK_ERROR') {
+          Alert.alert("Connexion impossible", "Veuillez vérifier votre connexion Internet.");
+        } else {
+          Alert.alert('Erreur', res.error || 'Impossible d\'envoyer le code.');
+        }
       }
     } catch (error) {
-      Alert.alert('Erreur', 'Une erreur est survenue lors de l\'envoi du code.');
+      Alert.alert('Erreur', 'Une erreur est survenue lors de l\'envoi du code. Veuillez vérifier votre connexion.');
+    } finally {
+      setForgotLoading(false);
+    }
+  };
+
+  const handleResendForgotCode = async () => {
+    if (forgotCountdown > 0) return;
+    const clean = forgotId.trim();
+    setForgotLoading(true);
+    try {
+      const res = await sendPhoneVerificationCode(clean, 'recuperation');
+      if (res.success) {
+        setExpectedForgotCode(res.code);
+        setForgotDemoCode(!res.delivered ? res.code : null);
+        setForgotCountdown(30);
+      }
+    } catch (e) {
+      Alert.alert('Erreur', 'Impossible de renvoyer le code.');
     } finally {
       setForgotLoading(false);
     }
@@ -198,35 +269,6 @@ export default function LoginScreen({ navigation }) {
       behavior={Platform.OS === 'ios' ? 'padding' : undefined} 
       style={{ flex: 1 }}
     >
-      {/* BANNIÈRE SMS DIRECTE FLOTTANTE STYLE WAVE */}
-      {smsBannerVisible && (
-        <Animated.View 
-          style={[
-            styles.waveSmsBanner,
-            { transform: [{ translateY: bannerAnim }] }
-          ]}
-        >
-          <TouchableOpacity 
-            style={styles.waveSmsContent} 
-            onPress={handleBannerTap}
-            activeOpacity={0.9}
-          >
-            <View style={styles.waveSmsHeader}>
-              <View style={styles.waveAppBadge}>
-                <Ionicons name="chatbubble-ellipses" size={14} color="#FFFFFF" />
-              </View>
-              <Text style={styles.waveSenderTitle}>MESSAGE • LogeÉtudiant</Text>
-              <Text style={styles.waveTimeText}>À l'instant</Text>
-            </View>
-
-            <Text style={styles.waveBodyText}>
-              Votre code de validation LogeÉtudiant est : <Text style={styles.waveCodeHighlight}>{smsBannerCode}</Text>. Ne le partagez avec personne.
-            </Text>
-            <Text style={styles.waveTapHint}>👉 Touchez pour copier et insérer le code</Text>
-          </TouchableOpacity>
-        </Animated.View>
-      )}
-
       <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
         
         {/* LOGO PARFAITEMENT DÉTOURÉ & AGRANDI EN HAUTE DÉFINITION */}
@@ -239,26 +281,25 @@ export default function LoginScreen({ navigation }) {
         </View>
 
         <Text style={styles.title}>Connexion</Text>
-        <Text style={styles.subtitle}>Bienvenue sur LogeÉtudiant Sénégal</Text>
+        <Text style={styles.subtitle}>Bienvenue sur Logetu Sénégal</Text>
 
-        {/* CHAMP IDENTIFIANT : ACCEPTE EMAIL OU NUMÉRO DE TÉLÉPHONE */}
+        {/* CHAMP NUMÉRO DE TÉLÉPHONE (9 CHIFFRES) */}
         <View style={styles.inputContainer}>
-          <Ionicons name="person-outline" size={20} color="#1E40AF" style={styles.inputIcon} />
+          <Ionicons name="call-outline" size={20} color="#003880" style={styles.inputIcon} />
           <TextInput
             style={styles.inputField}
-            placeholder="Numéro de téléphone ou Email"
+            placeholder="Numéro de téléphone"
             placeholderTextColor="#94A3B8"
             value={identifier}
             onChangeText={setIdentifier}
-            autoCapitalize="none"
-            keyboardType="default"
-            maxLength={45}
+            keyboardType="numeric"
+            maxLength={9}
           />
         </View>
 
         {/* CHAMP MOT DE PASSE AVEC ŒIL */}
         <View style={styles.inputContainer}>
-          <Ionicons name="lock-closed-outline" size={20} color="#1E40AF" style={styles.inputIcon} />
+          <Ionicons name="lock-closed-outline" size={20} color="#003880" style={styles.inputIcon} />
           <TextInput
             style={styles.inputField}
             placeholder="Mot de passe (6 chiffres)"
@@ -316,34 +357,49 @@ export default function LoginScreen({ navigation }) {
         </View>
       </ScrollView>
 
-      {/* MODALE RÉCUPÉRATION DE MOT DE PASSE PAR TÉLÉPHONE OU EMAIL */}
-      <Modal visible={forgotModalVisible} animationType="slide" transparent={true}>
-        <View style={styles.modalOverlay}>
+      {/* MODALE RÉCUPÉRATION DE MOT DE PASSE ULTRA-PROFESSIONNELLE */}
+      <Modal 
+        visible={forgotModalVisible} 
+        animationType="slide" 
+        transparent={true}
+        onRequestClose={() => setForgotModalVisible(false)}
+      >
+        <KeyboardAvoidingView 
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined} 
+          style={styles.modalOverlay}
+        >
           <View style={styles.modalCard}>
             <View style={styles.modalBar} />
             
-            <View style={styles.modalHeaderRow}>
-              <View style={styles.modalIconBox}>
-                <Ionicons name="key-outline" size={24} color="#1E40AF" />
+            <View style={styles.modalTopRow}>
+              <View style={styles.modalBadgeCircle}>
+                <Ionicons 
+                  name={forgotStep === 1 ? "key" : "shield-checkmark"} 
+                  size={26} 
+                  color="#003880" 
+                />
               </View>
               <TouchableOpacity 
-                style={styles.modalCloseBtn} 
+                style={styles.modalCloseTopRight} 
                 onPress={() => setForgotModalVisible(false)}
+                hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
               >
-                <Ionicons name="close" size={20} color="#64748B" />
+                <Ionicons name="close" size={22} color="#64748B" />
               </TouchableOpacity>
             </View>
 
-            <Text style={styles.modalTitle}>Récupération de compte</Text>
+            <Text style={styles.modalTitleCentered}>
+              {forgotStep === 1 ? "Mot de passe oublié" : "Vérification du code"}
+            </Text>
             
             {forgotStep === 1 ? (
               <>
-                <Text style={styles.modalDesc}>
-                  Saisissez votre <Text style={{ fontWeight: 'bold' }}>numéro de téléphone</Text>. Un code direct à 6 chiffres vous sera envoyé comme sur Wave.
+                <Text style={styles.modalDescCentered}>
+                  Saisissez votre numéro de téléphone pour recevoir votre code de réinitialisation.
                 </Text>
 
                 <View style={[styles.inputContainer, { marginTop: 8 }]}>
-                  <Ionicons name="call-outline" size={20} color="#1E40AF" style={styles.inputIcon} />
+                  <Ionicons name="call-outline" size={20} color="#003880" style={styles.inputIcon} />
                   <TextInput
                     style={styles.inputField}
                     placeholder="Numéro de téléphone"
@@ -357,41 +413,111 @@ export default function LoginScreen({ navigation }) {
                 </View>
 
                 <TouchableOpacity 
-                  style={styles.modalActionBtn} 
+                  style={[
+                    styles.modalConfirmBtn,
+                    forgotId.trim().length === 9 ? styles.modalConfirmBtnActive : styles.modalConfirmBtnDisabled
+                  ]} 
                   onPress={handleSendForgotCode}
-                  disabled={forgotLoading}
+                  disabled={forgotLoading || forgotId.trim().length !== 9}
                   activeOpacity={0.85}
                 >
                   {forgotLoading ? (
                     <ActivityIndicator color="#fff" />
                   ) : (
-                    <Text style={styles.modalActionBtnText}>Recevoir mon code à 6 chiffres</Text>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}>
+                      <Text style={styles.modalConfirmBtnText}>Recevoir le code</Text>
+                      <Ionicons name="arrow-forward" size={18} color="#fff" style={{ marginLeft: 6 }} />
+                    </View>
                   )}
+                </TouchableOpacity>
+
+                <TouchableOpacity 
+                  style={styles.modalCancelLink} 
+                  onPress={() => setForgotModalVisible(false)}
+                >
+                  <Text style={styles.modalCancelLinkText}>Annuler</Text>
                 </TouchableOpacity>
               </>
             ) : (
               <>
-                <Text style={styles.modalDesc}>
-                  Code envoyé à <Text style={{ fontWeight: 'bold' }}>{forgotId}</Text>. Saisissez le code à 6 chiffres reçu et définissez votre nouveau mot de passe.
+                <Text style={styles.modalDescCentered}>
+                  Saisissez le code à 6 chiffres envoyé au{'\n'}
+                  <Text style={styles.phoneHighlight}>+221 {forgotId}</Text>
                 </Text>
 
-                {/* CHAMP CODE 6 CHIFFRES */}
-                <View style={[styles.inputContainer, { marginTop: 8 }]}>
-                  <Ionicons name="shield-checkmark-outline" size={20} color="#1E40AF" style={styles.inputIcon} />
+                {/* 6 CELLULES DU CODE PIN OTP ULTRA-PROFESSIONNEL */}
+                <TouchableOpacity 
+                  style={styles.otpContainer} 
+                  activeOpacity={1} 
+                  onPress={() => forgotOtpRef.current?.focus()}
+                >
                   <TextInput
-                    style={[styles.inputField, { letterSpacing: 6, fontSize: 18, fontWeight: 'bold', textAlign: 'center' }]}
-                    placeholder="208341"
-                    placeholderTextColor="#94A3B8"
+                    ref={forgotOtpRef}
                     value={forgotCode}
-                    onChangeText={setForgotCode}
+                    onChangeText={(txt) => {
+                      const clean = txt.replace(/[^0-9]/g, '').slice(0, 6);
+                      setForgotCode(clean);
+                    }}
                     keyboardType="number-pad"
                     maxLength={6}
+                    style={styles.hiddenInput}
+                    autoFocus={true}
                   />
+                  {[0, 1, 2, 3, 4, 5].map((i) => {
+                    const char = forgotCode[i] || '';
+                    const isCurrent = forgotCode.length === i;
+                    const isFilled = char !== '';
+                    return (
+                      <View 
+                        key={i} 
+                        style={[
+                          styles.otpCell,
+                          isCurrent && styles.otpCellActive,
+                          isFilled && styles.otpCellFilled
+                        ]}
+                      >
+                        <Text style={styles.otpCellText}>{char}</Text>
+                      </View>
+                    );
+                  })}
+                </TouchableOpacity>
+
+                {/* BADGE CODE DÉMO DISCRET EN MODE ATTENTE PASSERELLE */}
+                {forgotDemoCode ? (
+                  <TouchableOpacity 
+                    style={styles.demoCodePill}
+                    onPress={() => setForgotCode(forgotDemoCode)}
+                    activeOpacity={0.8}
+                  >
+                    <Ionicons name="sparkles" size={14} color="#E8A008" style={{ marginRight: 6 }} />
+                    <Text style={styles.demoCodeText}>
+                      Code reçu : <Text style={styles.demoCodeBold}>{forgotDemoCode}</Text>  (Toucher pour insérer)
+                    </Text>
+                  </TouchableOpacity>
+                ) : null}
+
+                {/* COMPTE À REBOURS RENVOI */}
+                <View style={styles.resendRow}>
+                  {forgotCountdown > 0 ? (
+                    <Text style={styles.countdownText}>
+                      Renvoyer le code dans <Text style={styles.countdownNumber}>{forgotCountdown}s</Text>
+                    </Text>
+                  ) : (
+                    <TouchableOpacity 
+                      onPress={handleResendForgotCode}
+                      disabled={forgotLoading}
+                      activeOpacity={0.7}
+                    >
+                      <Text style={styles.resendActiveText}>
+                        {forgotLoading ? "Envoi..." : "Renvoyer un nouveau code"}
+                      </Text>
+                    </TouchableOpacity>
+                  )}
                 </View>
 
                 {/* CHAMP NOUVEAU MOT DE PASSE */}
-                <View style={styles.inputContainer}>
-                  <Ionicons name="lock-closed-outline" size={20} color="#1E40AF" style={styles.inputIcon} />
+                <View style={[styles.inputContainer, { marginTop: 4 }]}>
+                  <Ionicons name="lock-closed-outline" size={20} color="#003880" style={styles.inputIcon} />
                   <TextInput
                     style={styles.inputField}
                     placeholder="Nouveau mot de passe (6 chiffres)"
@@ -415,37 +541,34 @@ export default function LoginScreen({ navigation }) {
                 </View>
 
                 <TouchableOpacity 
-                  style={styles.modalActionBtn} 
+                  style={[
+                    styles.modalConfirmBtn,
+                    (forgotCode.length === 6 && newPassword.length >= 6) ? styles.modalConfirmBtnActive : styles.modalConfirmBtnDisabled
+                  ]} 
                   onPress={handleConfirmNewPassword}
-                  disabled={forgotLoading}
+                  disabled={forgotLoading || forgotCode.length !== 6 || newPassword.length < 6}
                   activeOpacity={0.85}
                 >
                   {forgotLoading ? (
                     <ActivityIndicator color="#fff" />
                   ) : (
-                    <Text style={styles.modalActionBtnText}>Valider mon nouveau mot de passe</Text>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}>
+                      <Text style={styles.modalConfirmBtnText}>Valider mon nouveau mot de passe</Text>
+                      <Ionicons name="checkmark-circle" size={18} color="#fff" style={{ marginLeft: 6 }} />
+                    </View>
                   )}
                 </TouchableOpacity>
 
                 <TouchableOpacity 
-                  style={{ alignSelf: 'center', marginTop: 10, padding: 4 }}
+                  style={styles.modalCancelLink} 
                   onPress={() => setForgotStep(1)}
                 >
-                  <Text style={{ color: '#1E40AF', fontSize: 13, fontWeight: '600' }}>
-                    Changer de numéro / email
-                  </Text>
+                  <Text style={styles.modalCancelLinkText}>Changer de numéro de téléphone</Text>
                 </TouchableOpacity>
               </>
             )}
-
-            <TouchableOpacity 
-              style={styles.modalCancelBtn} 
-              onPress={() => setForgotModalVisible(false)}
-            >
-              <Text style={styles.modalCancelBtnText}>Annuler</Text>
-            </TouchableOpacity>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
     </KeyboardAvoidingView>
   );
@@ -471,13 +594,14 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 26,
     fontWeight: '800',
-    color: '#0F172A',
+    color: '#003880', // Bleu officiel de l'application
     marginBottom: 4,
     textAlign: 'center',
   },
   subtitle: {
-    fontSize: 14,
-    color: '#64748B',
+    fontSize: 13,
+    color: '#E8A008', // Ocre doré officiel du logo
+    fontWeight: '700',
     marginBottom: 24,
     textAlign: 'center',
   },
@@ -514,16 +638,16 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   forgotPasswordText: {
-    color: '#1E40AF',
+    color: '#003880',
     fontSize: 13,
     fontWeight: '600',
   },
   button: {
-    backgroundColor: '#1E40AF',
+    backgroundColor: '#003880',
     paddingVertical: 15,
     borderRadius: 12,
     alignItems: 'center',
-    shadowColor: '#1E40AF',
+    shadowColor: '#003880',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.25,
     shadowRadius: 6,
@@ -551,153 +675,208 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
   registerLinkText: {
-    color: '#1E40AF',
+    color: '#E8A008', // Ocre doré officiel du logo
     fontSize: 14,
-    fontWeight: '700',
+    fontWeight: '800',
   },
 
-  /* Notification SMS style Wave */
-  waveSmsBanner: {
-    position: 'absolute',
-    top: 0,
-    left: 14,
-    right: 14,
-    zIndex: 9999,
-    backgroundColor: '#0F172A',
-    borderRadius: 16,
-    padding: 14,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.28,
-    shadowRadius: 12,
-    elevation: 12,
-    borderWidth: 1,
-    borderColor: '#334155',
-  },
-  waveSmsContent: {},
-  waveSmsHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 6,
-  },
-  waveAppBadge: {
-    backgroundColor: '#1E40AF',
-    width: 24,
-    height: 24,
-    borderRadius: 6,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 8,
-  },
-  waveSenderTitle: {
-    fontSize: 12,
-    fontWeight: '800',
-    color: '#F8FAFC',
-    flex: 1,
-    letterSpacing: 0.5,
-  },
-  waveTimeText: {
-    fontSize: 11,
-    color: '#94A3B8',
-  },
-  waveBodyText: {
-    fontSize: 13,
-    color: '#E2E8F0',
-    lineHeight: 18,
-  },
-  waveCodeHighlight: {
-    fontSize: 15,
-    fontWeight: '800',
-    color: '#60A5FA',
-    letterSpacing: 1.5,
-  },
-  waveTapHint: {
-    fontSize: 11,
-    color: '#94A3B8',
-    marginTop: 4,
-    fontStyle: 'italic',
-  },
-
-  /* Modale personnalisée */
+  /* Modale Récupération Ultra-Professionnelle */
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(15, 23, 42, 0.6)',
+    backgroundColor: 'rgba(15, 23, 42, 0.65)',
     justifyContent: 'flex-end',
   },
   modalCard: {
     backgroundColor: '#FFFFFF',
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    padding: 24,
-    paddingBottom: Platform.OS === 'ios' ? 40 : 24,
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    paddingHorizontal: 22,
+    paddingTop: 12,
+    paddingBottom: Platform.OS === 'ios' ? 40 : 26,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: -4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 10,
-    elevation: 10,
+    shadowOffset: { width: 0, height: -6 },
+    shadowOpacity: 0.12,
+    shadowRadius: 12,
+    elevation: 12,
   },
   modalBar: {
-    width: 40,
+    width: 36,
     height: 4,
-    backgroundColor: '#E2E8F0',
+    backgroundColor: '#CBD5E1',
     borderRadius: 2,
     alignSelf: 'center',
-    marginBottom: 16,
-  },
-  modalHeaderRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
     marginBottom: 12,
   },
-  modalIconBox: {
-    width: 44,
-    height: 44,
-    borderRadius: 12,
+  modalTopRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    position: 'relative',
+    marginBottom: 12,
+  },
+  modalBadgeCircle: {
+    width: 54,
+    height: 54,
+    borderRadius: 27,
     backgroundColor: '#EFF6FF',
     justifyContent: 'center',
     alignItems: 'center',
+    borderWidth: 1.5,
+    borderColor: '#BFDBFE',
   },
-  modalCloseBtn: {
+  modalCloseTopRight: {
+    position: 'absolute',
+    right: 0,
+    top: 4,
     padding: 6,
   },
-  modalTitle: {
+  modalTitleCentered: {
     fontSize: 20,
     fontWeight: '800',
     color: '#0F172A',
+    textAlign: 'center',
     marginBottom: 6,
   },
-  modalDesc: {
-    fontSize: 14,
+  modalDescCentered: {
+    fontSize: 13,
     color: '#64748B',
-    lineHeight: 20,
-    marginBottom: 16,
+    lineHeight: 19,
+    textAlign: 'center',
+    marginBottom: 8,
   },
-  modalActionBtn: {
-    backgroundColor: '#1E40AF',
+  phoneHighlight: {
+    fontWeight: '800',
+    color: '#003880',
+    fontSize: 14,
+  },
+
+  /* 6 Cellules OTP Pin */
+  otpContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginVertical: 14,
+    paddingHorizontal: 4,
+  },
+  hiddenInput: {
+    position: 'absolute',
+    opacity: 0,
+    width: 1,
+    height: 1,
+  },
+  otpCell: {
+    width: 46,
+    height: 54,
+    borderRadius: 12,
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1.5,
+    borderColor: '#E2E8F0',
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 2,
+    elevation: 1,
+  },
+  otpCellActive: {
+    borderColor: '#003880',
+    backgroundColor: '#FFFFFF',
+    borderWidth: 2,
+    shadowColor: '#003880',
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  otpCellFilled: {
+    borderColor: '#003880',
+    backgroundColor: '#F0F7FF',
+  },
+  otpCellText: {
+    fontSize: 22,
+    fontWeight: '800',
+    color: '#003880',
+  },
+
+  /* Code démo */
+  demoCodePill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#FFFBEB',
+    borderWidth: 1,
+    borderColor: '#FDE68A',
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 20,
+    alignSelf: 'center',
+    marginBottom: 8,
+  },
+  demoCodeText: {
+    fontSize: 12,
+    color: '#92400E',
+    fontWeight: '600',
+  },
+  demoCodeBold: {
+    fontWeight: '800',
+    color: '#B45309',
+    fontSize: 13,
+  },
+
+  /* Compte à rebours renvoi */
+  resendRow: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 12,
+    marginTop: 4,
+  },
+  countdownText: {
+    fontSize: 13,
+    color: '#94A3B8',
+    fontWeight: '500',
+  },
+  countdownNumber: {
+    color: '#003880',
+    fontWeight: '700',
+  },
+  resendActiveText: {
+    fontSize: 13,
+    color: '#E8A008',
+    fontWeight: '800',
+  },
+
+  /* Bouton confirmation */
+  modalConfirmBtn: {
     paddingVertical: 14,
     borderRadius: 12,
     alignItems: 'center',
-    marginTop: 10,
-    shadowColor: '#1E40AF',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  modalActionBtnText: {
-    color: '#FFFFFF',
-    fontSize: 15,
-    fontWeight: '700',
-  },
-  modalCancelBtn: {
-    paddingVertical: 12,
-    alignItems: 'center',
+    justifyContent: 'center',
     marginTop: 6,
   },
-  modalCancelBtnText: {
+  modalConfirmBtnActive: {
+    backgroundColor: '#003880',
+    shadowColor: '#003880',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.25,
+    shadowRadius: 5,
+    elevation: 3,
+  },
+  modalConfirmBtnDisabled: {
+    backgroundColor: '#CBD5E1',
+  },
+  modalConfirmBtnText: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '800',
+  },
+  modalCancelLink: {
+    paddingVertical: 12,
+    alignItems: 'center',
+    marginTop: 4,
+  },
+  modalCancelLinkText: {
     color: '#64748B',
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '600',
   },
 });

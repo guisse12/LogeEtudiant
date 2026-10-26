@@ -17,12 +17,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { collection, addDoc, doc, getDoc, updateDoc, serverTimestamp } from 'firebase/firestore';
 import { db, auth } from '../config/firebase';
 import { formatCleanFullName } from '../utils/nameFormatter';
-
-const UNIVERSITES_DISPO = [
-  'UCAD', 'UGB', 'USSEIN', 'UASZ', 'UIDT', 'UAM', 
-  'URDFS', 'USO', 'ISM', 'IAM', 'SupDeCo', 'ESMT', 
-  'CESAG', 'UCAO', 'DIT', 'AFI-UE', 'ESEBAT', 'CEFAS'
-];
+import { UNIVERSITES } from '../services/universityService';
 
 export default function AjouterColocAnnonceScreen({ navigation, route }) {
   const annonceToEdit = route?.params?.annonceToEdit;
@@ -146,7 +141,7 @@ export default function AjouterColocAnnonceScreen({ navigation, route }) {
           style={styles.navBackBtn}
           hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
         >
-          <Ionicons name="arrow-back" size={22} color="#1E40AF" />
+          <Ionicons name="arrow-back" size={22} color="#003880" />
         </TouchableOpacity>
         <Text style={styles.navTitle}>{isEditing ? "Modifier l'annonce" : "Nouvelle Colocation"}</Text>
         <View style={{ width: 28 }} />
@@ -164,14 +159,16 @@ export default function AjouterColocAnnonceScreen({ navigation, route }) {
 
           <Text style={styles.label}>Zone / Université cible :</Text>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.uniContainer}>
-            {UNIVERSITES_DISPO.map((uni) => (
+            {UNIVERSITES.map((uni) => (
               <TouchableOpacity
-                key={uni}
-                style={[styles.uniChip, universiteId === uni && styles.uniChipSelected]}
-                onPress={() => setUniversiteId(uni)}
+                key={uni.id}
+                style={[styles.uniChip, universiteId === uni.id && styles.uniChipSelected]}
+                onPress={() => setUniversiteId(uni.id)}
                 activeOpacity={0.8}
               >
-                <Text style={[styles.uniText, universiteId === uni && styles.uniTextSelected]}>{uni}</Text>
+                <Text style={[styles.uniText, universiteId === uni.id && styles.uniTextSelected]}>
+                  {uni.id} ({uni.ville})
+                </Text>
               </TouchableOpacity>
             ))}
           </ScrollView>
@@ -269,11 +266,11 @@ const styles = StyleSheet.create({
   label: { fontSize: 13, fontWeight: '700', color: '#334155', marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.4 },
   uniContainer: { flexDirection: 'row', marginBottom: 18, maxHeight: 42 },
   uniChip: { paddingHorizontal: 15, paddingVertical: 8, backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#CBD5E0', borderRadius: 20, marginRight: 8, height: 36 },
-  uniChipSelected: { backgroundColor: '#1E40AF', borderColor: '#1E40AF' },
+  uniChipSelected: { backgroundColor: '#003880', borderColor: '#003880' },
   uniText: { fontSize: 13, color: '#475569', fontWeight: '500' },
   uniTextSelected: { color: '#FFFFFF', fontWeight: 'bold' },
   input: { backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#CBD5E0', borderRadius: 8, padding: 12, fontSize: 14, marginBottom: 16, color: '#1E293B' },
   textArea: { height: 100, textAlignVertical: 'top' },
-  submitButton: { backgroundColor: '#1E40AF', paddingVertical: 14, borderRadius: 10, alignItems: 'center', marginTop: 10, elevation: 2 },
+  submitButton: { backgroundColor: '#003880', paddingVertical: 14, borderRadius: 10, alignItems: 'center', marginTop: 10, elevation: 2 },
   submitButtonText: { color: '#FFF', fontWeight: 'bold', fontSize: 15 },
 });

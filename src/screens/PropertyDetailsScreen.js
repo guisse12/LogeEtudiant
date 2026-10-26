@@ -187,7 +187,7 @@ export default function PropertyDetailsScreen({ route, navigation }) {
       cleanPhone = `221${cleanPhone}`;
     }
 
-    const message = `Bonjour, je suis intéressé(e) par votre logement "${titreBien || 'étudiant'}" vu sur LogeÉtudiant. Est-il toujours disponible ?`;
+    const message = `Bonjour, je suis intéressé(e) par votre logement "${titreBien || 'étudiant'}" vu sur Logetu. Est-il toujours disponible ?`;
     const whatsappUrl = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(message)}`;
 
     Linking.openURL(whatsappUrl).catch(() => {
@@ -282,7 +282,7 @@ export default function PropertyDetailsScreen({ route, navigation }) {
           onPress={() => navigation.goBack()}
           hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
         >
-          <Ionicons name="arrow-back" size={22} color="#1E40AF" />
+          <Ionicons name="arrow-back" size={22} color="#003880" />
           <Text style={styles.navBackText}>Retour</Text>
         </TouchableOpacity>
 
@@ -295,7 +295,7 @@ export default function PropertyDetailsScreen({ route, navigation }) {
           <Ionicons 
             name={isFavorite ? "heart" : "heart-outline"} 
             size={22} 
-            color={isFavorite ? "#EF4444" : "#1E40AF"} 
+            color={isFavorite ? "#EF4444" : "#003880"} 
           />
         </TouchableOpacity>
       </View>
@@ -334,16 +334,23 @@ export default function PropertyDetailsScreen({ route, navigation }) {
 
         {/* BADGES PRO */}
         <View style={styles.badgeContainer}>
+          {property.localisation?.region ? (
+            <View style={[styles.badgePill, { backgroundColor: '#EFF6FF', borderColor: '#BFDBFE' }]}>
+              <Ionicons name="map-outline" size={13} color="#003880" style={{ marginRight: 3 }} />
+              <Text style={[styles.badgeText, { color: '#003880' }]}>{property.localisation.region}</Text>
+            </View>
+          ) : null}
+
           {property.localisation?.ville ? (
             <View style={[styles.badgePill, { backgroundColor: '#EFF6FF', borderColor: '#BFDBFE' }]}>
-              <Ionicons name="location-outline" size={13} color="#1E40AF" style={{ marginRight: 3 }} />
-              <Text style={[styles.badgeText, { color: '#1E40AF' }]}>{property.localisation.ville}</Text>
+              <Ionicons name="location-outline" size={13} color="#003880" style={{ marginRight: 3 }} />
+              <Text style={[styles.badgeText, { color: '#003880' }]}>{property.localisation.ville}</Text>
             </View>
           ) : null}
 
           <View style={[styles.badgePill, { backgroundColor: '#EFF6FF', borderColor: '#BFDBFE' }]}>
-            <Ionicons name="school-outline" size={13} color="#1E40AF" style={{ marginRight: 3 }} />
-            <Text style={[styles.badgeText, { color: '#1E40AF' }]}>{property.universiteId || "Campus"}</Text>
+            <Ionicons name="school-outline" size={13} color="#003880" style={{ marginRight: 3 }} />
+            <Text style={[styles.badgeText, { color: '#003880' }]}>{property.universiteId || "Campus"}</Text>
           </View>
 
           <View style={[styles.badgePill, { backgroundColor: '#F1F5F9', borderColor: '#E2E8F0' }]}>
@@ -382,7 +389,7 @@ export default function PropertyDetailsScreen({ route, navigation }) {
         {/* CARTE DESCRIPTION */}
         <View style={styles.sectionCard}>
           <View style={styles.sectionHeaderRow}>
-            <Ionicons name="document-text-outline" size={18} color="#1E40AF" style={{ marginRight: 6 }} />
+            <Ionicons name="document-text-outline" size={18} color="#003880" style={{ marginRight: 6 }} />
             <Text style={styles.sectionTitle}>Description</Text>
           </View>
           <Text style={styles.propertyDescription}>{property.description || "Aucune description fournie."}</Text>
@@ -391,11 +398,11 @@ export default function PropertyDetailsScreen({ route, navigation }) {
         {/* CARTE LOCALISATION & GOOGLE MAPS */}
         <View style={styles.sectionCard}>
           <View style={styles.sectionHeaderRow}>
-            <Ionicons name="map-outline" size={18} color="#1E40AF" style={{ marginRight: 6 }} />
+            <Ionicons name="map-outline" size={18} color="#003880" style={{ marginRight: 6 }} />
             <Text style={styles.sectionTitle}>Localisation</Text>
           </View>
           <Text style={styles.addressText}>
-            📍 {property.localisation?.ville ? `${property.localisation.ville} • ` : ''}{property.localisation?.adresse || "Adresse non spécifiée"}
+            📍 {property.localisation?.region ? `${property.localisation.region} • ` : ''}{property.localisation?.ville ? `${property.localisation.ville} • ` : ''}{property.localisation?.adresse || "Adresse non spécifiée"}
           </Text>
           
           <TouchableOpacity 
@@ -408,20 +415,20 @@ export default function PropertyDetailsScreen({ route, navigation }) {
             activeOpacity={0.85}
           >
             <View style={styles.mapIconCircle}>
-              <Ionicons name="navigate" size={22} color="#1E40AF" />
+              <Ionicons name="navigate" size={22} color="#003880" />
             </View>
             <View style={{ flex: 1, marginLeft: 12 }}>
               <Text style={styles.mapBtnTitle}>Ouvrir l'itinéraire sur Google Maps</Text>
               <Text style={styles.mapBtnSubtitle}>Voir la distance exacte avec votre université</Text>
             </View>
-            <Ionicons name="chevron-forward" size={18} color="#1E40AF" />
+            <Ionicons name="chevron-forward" size={18} color="#003880" />
           </TouchableOpacity>
         </View>
 
         {/* AVIS DES ÉTUDIANTS */}
         <View style={styles.sectionCard}>
           <View style={styles.sectionHeaderRow}>
-            <Ionicons name="chatbubble-ellipses-outline" size={18} color="#1E40AF" style={{ marginRight: 6 }} />
+            <Ionicons name="chatbubble-ellipses-outline" size={18} color="#003880" style={{ marginRight: 6 }} />
             <Text style={styles.sectionTitle}>Avis des étudiants ({reviews.length})</Text>
           </View>
 
@@ -452,7 +459,7 @@ export default function PropertyDetailsScreen({ route, navigation }) {
           </View>
 
           {loadingReviews ? (
-            <ActivityIndicator size="small" color="#1E40AF" style={{ marginTop: 15 }} />
+            <ActivityIndicator size="small" color="#003880" style={{ marginTop: 15 }} />
           ) : reviews.length === 0 ? (
             <Text style={styles.noReviewsText}>Aucun avis pour l'instant. Soyez le premier étudiant à donner votre avis !</Text>
           ) : (
@@ -525,7 +532,7 @@ const styles = StyleSheet.create({
   },
   navBackText: {
     fontSize: 15,
-    color: '#1E40AF',
+    color: '#003880',
     fontWeight: '700',
     marginLeft: 4,
   },
@@ -597,7 +604,7 @@ const styles = StyleSheet.create({
   propertyPrice: {
     fontSize: 22,
     fontWeight: '900',
-    color: '#1E40AF',
+    color: '#E8A008', // Ocre doré officiel du logo
   },
   period: {
     fontSize: 13,
@@ -608,11 +615,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#1E40AF',
+    backgroundColor: '#003880',
     paddingVertical: 13,
     borderRadius: 12,
     marginBottom: 16,
-    shadowColor: '#1E40AF',
+    shadowColor: '#003880',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.2,
     shadowRadius: 4,
@@ -676,7 +683,7 @@ const styles = StyleSheet.create({
   mapBtnTitle: {
     fontSize: 13,
     fontWeight: '700',
-    color: '#1E40AF',
+    color: '#003880',
   },
   mapBtnSubtitle: {
     fontSize: 11,
@@ -723,7 +730,7 @@ const styles = StyleSheet.create({
     color: '#1E293B',
   },
   submitReviewBtn: {
-    backgroundColor: '#1E40AF',
+    backgroundColor: '#003880',
     paddingVertical: 10,
     borderRadius: 8,
     alignItems: 'center',

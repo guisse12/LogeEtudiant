@@ -1,22 +1,16 @@
 {
   "expo": {
-    "name": "LogeEtudiant",
+    "name": "Logetu",
     "slug": "LogeEtudiant",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/logo.png",
+    "icon": "./assets/icon-square.png",
     "userInterfaceStyle": "light",
-    "newArchEnabled": true,
-    "splash": {
-      "image": "./assets/logo.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
-    },
     "ios": {
       "supportsTablet": true,
       "infoPlist": {
-        "NSLocationWhenInUseUsageDescription": "LogeEtudiant a besoin de votre position pour afficher les logements étudiants autour de vous.",
-        "NSPhotoLibraryUsageDescription": "LogeEtudiant a besoin d'accéder à vos photos pour vous permettre de publier des logements.",
+        "NSLocationWhenInUseUsageDescription": "Logetu a besoin de votre position pour afficher les logements étudiants autour de vous.",
+        "NSPhotoLibraryUsageDescription": "Logetu a besoin d'accéder à vos photos pour vous permettre de publier des logements.",
         "LSApplicationQueriesSchemes": [
           "whatsapp",
           "tel",
@@ -27,11 +21,11 @@
       }
     },
     "android": {
+      "icon": "./assets/icon-square.png",
       "adaptiveIcon": {
-        "foregroundImage": "./assets/logo.png",
+        "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
-      "edgeToEdgeEnabled": true,
       "package": "com.capico.logeetudiant",
       "versionCode": 1,
       "permissions": [
@@ -42,21 +36,38 @@
       ]
     },
     "web": {
-      "favicon": "./assets/logo.png"
+      "favicon": "./assets/icon-square.png"
     },
     "plugins": [
       "expo-status-bar",
       "expo-video",
       [
+        "expo-splash-screen",
+        {
+          "image": "./assets/logo.png",
+          "resizeMode": "contain",
+          "backgroundColor": "#ffffff"
+        }
+      ],
+      [
         "expo-location",
         {
-          "locationAlwaysAndWhenInUsePermission": "Autoriser LogeEtudiant à utiliser votre position pour afficher les logements autour de vous."
+          "locationAlwaysAndWhenInUsePermission": "Autoriser Logetu à utiliser votre position pour afficher les logements autour de vous."
         }
       ],
       [
         "expo-image-picker",
         {
-          "photosPermission": "Autoriser LogeEtudiant à accéder à vos photos pour ajouter des images de logement."
+          "photosPermission": "Autoriser Logetu à accéder à vos photos pour ajouter des images de logement."
+        }
+      ],
+      "expo-font",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/logo.png",
+          "resizeMode": "contain",
+          "backgroundColor": "#ffffff"
         }
       ]
     ],

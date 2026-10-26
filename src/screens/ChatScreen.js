@@ -192,7 +192,7 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   myMessage: {
-    backgroundColor: '#1E40AF',
+    backgroundColor: '#003880',
     alignSelf: 'flex-end',
     borderBottomRightRadius: 2,
   },
@@ -226,7 +226,7 @@ const styles = StyleSheet.create({
   },
   sendButton: {
     marginLeft: 10,
-    backgroundColor: '#1E40AF',
+    backgroundColor: '#003880',
     paddingVertical: 10,
     paddingHorizontal: 16,
     borderRadius: 20,

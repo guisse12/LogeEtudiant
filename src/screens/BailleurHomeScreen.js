@@ -21,40 +21,18 @@ import * as ImagePicker from 'expo-image-picker';
 import * as Location from 'expo-location';
 import { db, auth } from '../config/firebase';
 import { logoutUser } from '../services/authService';
-
-const UNIVERSITES = [
-  { id: 'UCAD', nom: 'UCAD (Dakar)' },
-  { id: 'UGB', nom: 'UGB (Saint-Louis)' },
-  { id: 'USSEIN', nom: 'USSEIN (Sine Saloum)' },
-  { id: 'UASZ', nom: 'UASZ (Ziguinchor)' },
-  { id: 'UIDT', nom: 'UIDT (Thiès)' },
-  { id: 'UAM', nom: 'UAM (Diamniadio)' },
-  { id: 'URDFS', nom: 'URDFS (Dakar-Plateau)' },
-  { id: 'USO', nom: 'USO (Tambacounda)' },
-  { id: 'ISM', nom: 'ISM (Dakar)' },
-  { id: 'IAM', nom: 'IAM (Dakar)' },
-  { id: 'SupDeCo', nom: 'SupDeCo (Dakar)' },
-  { id: 'ESMT', nom: 'ESMT (Dakar)' },
-  { id: 'CESAG', nom: 'CESAG (Dakar)' },
-  { id: 'UCAO', nom: 'UCAO (Dakar)' },
-  { id: 'DIT', nom: 'DIT (Dakar)' },
-  { id: 'AFI-UE', nom: 'AFI-UE (Dakar)' },
-  { id: 'ESEBAT', nom: 'ESEBAT (Dakar)' },
-  { id: 'CEFAS', nom: 'CEFAS (Dakar)' },
-];
+import { 
+  UNIVERSITES, 
+  SENEGAL_REGIONS, 
+  ZONES_SENEGAL,
+  getRegionById, 
+  getUniversitesByRegion, 
+  getUniversitesByVille,
+  getUniversitesByZone,
+  isPropertyInZone 
+} from '../services/universityService';
 
 const TYPES_LOGEMENT = ['Studio', 'Chambre', 'Appartement', 'Colocation', 'Villa'];
-
-const SENEGAL_VILLES = [
-  { id: 'DAKAR', nom: 'Dakar', lat: 14.69275, lng: -17.44667, uniDefault: 'UCAD' },
-  { id: 'THIES', nom: 'Thiès', lat: 14.79100, lng: -16.92560, uniDefault: 'UIDT' },
-  { id: 'SAINT_LOUIS', nom: 'Saint-Louis', lat: 16.03260, lng: -16.48960, uniDefault: 'UGB' },
-  { id: 'DIAMNIADIO', nom: 'Diamniadio', lat: 14.72140, lng: -17.18120, uniDefault: 'UAM' },
-  { id: 'ZIGUINCHOR', nom: 'Ziguinchor', lat: 12.56840, lng: -16.27330, uniDefault: 'UASZ' },
-  { id: 'KAOLACK', nom: 'Kaolack', lat: 14.13780, lng: -16.07470, uniDefault: 'USSEIN' },
-  { id: 'TAMBA', nom: 'Tambacounda', lat: 13.77120, lng: -13.66730, uniDefault: 'USO' },
-  { id: 'MBOUR', nom: 'Mbour / Saly', lat: 14.42200, lng: -16.96340, uniDefault: 'UIDT' },
-];
 
 export default function BailleurHomeScreen({ navigation }) {
   const [biens, setBiens] = useState([]);
@@ -71,11 +49,12 @@ export default function BailleurHomeScreen({ navigation }) {
   const [description, setDescription] = useState('');
   const [prix, setPrix] = useState('');
   const [type, setType] = useState('Studio');
+  const [selectedRegion, setSelectedRegion] = useState('DAKAR');
+  const [selectedVille, setSelectedVille] = useState('DAKAR_VILLE');
   const [universiteId, setUniversiteId] = useState('UCAD');
   const [telephone, setTelephone] = useState('');
   const [adresse, setAdresse] = useState('');
   const [mediasUris, setMediasUris] = useState([]); // Tableau pour stocker jusqu'à 8 photos/vidéos
-  const [selectedVille, setSelectedVille] = useState('DAKAR');
   
   // Coordonnées géographiques (Dakar par défaut)
   const [latitude, setLatitude] = useState(14.69275);
@@ -90,21 +69,26 @@ export default function BailleurHomeScreen({ navigation }) {
         return;
       }
       
-      // 1. Vérifier le statut de validation du bailleur dans Firestore
+      // 1. Charger en parallèle le statut du compte et les biens du bailleur
       const userDocRef = doc(db, "users", auth.currentUser.uid);
-      const userSnap = await getDoc(userDocRef);
-      if (userSnap.exists()) {
+      const q = query(collection(db, "properties"), where("proprietaireId", "==", auth.currentUser.uid));
+
+      const [userSnap, querySnapshot] = await Promise.all([
+        getDoc(userDocRef).catch(() => null),
+        getDocs(q).catch(() => ({ empty: true, forEach: () => {} }))
+      ]);
+
+      if (userSnap && userSnap.exists()) {
         const userData = userSnap.data();
         setStatutValidation(userData.statutValidation || 'en_attente');
       }
 
-      // 2. Charger ses biens
-      const q = query(collection(db, "properties"), where("proprietaireId", "==", auth.currentUser.uid));
-      const querySnapshot = await getDocs(q);
       let list = [];
-      querySnapshot.forEach((docSnap) => {
-        list.push({ id: docSnap.id, ...docSnap.data() });
-      });
+      if (querySnapshot && !querySnapshot.empty) {
+        querySnapshot.forEach((docSnap) => {
+          list.push({ id: docSnap.id, ...docSnap.data() });
+        });
+      }
       setBiens(list);
     } catch (error) {
       console.error("Erreur chargement biens bailleur :", error);
@@ -180,12 +164,35 @@ export default function BailleurHomeScreen({ navigation }) {
     setMediasUris(prevMedias => prevMedias.filter((_, index) => index !== indexToRemove));
   };
 
+  // Sélection d'une région administrative du Sénégal
+  const handleSelectRegion = (region) => {
+    setSelectedRegion(region.id);
+    const defaultVilleObj = region.villes && region.villes[0];
+    if (defaultVilleObj) {
+      setSelectedVille(defaultVilleObj.id);
+      setLatitude(defaultVilleObj.lat);
+      setLongitude(defaultVilleObj.lng);
+    }
+    const zoneUnis = getUniversitesByZone(region.id);
+    if (zoneUnis.length > 0) {
+      if (!zoneUnis.some(u => u.id === universiteId)) {
+        setUniversiteId(zoneUnis[0].id);
+      }
+    } else if (region.defaultUni) {
+      setUniversiteId(region.defaultUni);
+    }
+  };
+
+  // Sélection d'une ville précise dans la région
   const handleSelectVille = (ville) => {
     setSelectedVille(ville.id);
     setLatitude(ville.lat);
     setLongitude(ville.lng);
-    if (ville.uniDefault) {
-      setUniversiteId(ville.uniDefault);
+    
+    // Si une université est située dans cette ville spécifique, la proposer
+    const cityUnis = getUniversitesByVille(ville.id);
+    if (cityUnis.length > 0 && !cityUnis.some(u => u.id === universiteId)) {
+      setUniversiteId(cityUnis[0].id);
     }
   };
 
@@ -210,7 +217,14 @@ export default function BailleurHomeScreen({ navigation }) {
       setMediasUris(bien.images || bien.medias || []);
       setLatitude(bien.localisation?.latitude || 14.69275);
       setLongitude(bien.localisation?.longitude || -17.44667);
-      setSelectedVille(bien.localisation?.villeId || 'DAKAR');
+
+      let initialReg = bien.localisation?.zoneId || bien.localisation?.regionId;
+      if (!initialReg) {
+        const matchingUni = UNIVERSITES.find(u => u.id === bien.universiteId);
+        initialReg = matchingUni?.regionId || 'DAKAR';
+      }
+      setSelectedRegion(initialReg);
+      setSelectedVille(bien.localisation?.villeId || 'DAKAR_VILLE');
     } else {
       setEditingBien(null);
       setTitre('');
@@ -221,7 +235,8 @@ export default function BailleurHomeScreen({ navigation }) {
       setTelephone('');
       setAdresse('');
       setMediasUris([]);
-      setSelectedVille('DAKAR');
+      setSelectedRegion('DAKAR');
+      setSelectedVille('DAKAR_VILLE');
       setLatitude(14.69275);
       setLongitude(-17.44667);
     }
@@ -259,17 +274,24 @@ export default function BailleurHomeScreen({ navigation }) {
         }
       }
 
-      const activeVille = SENEGAL_VILLES.find(v => v.id === selectedVille);
+      const currentReg = getRegionById(selectedRegion);
+      const activeVille = currentReg.villes.find(v => v.id === selectedVille) || currentReg.villes[0];
+      const matchingUni = UNIVERSITES.find(u => u.id === universiteId);
+
       const propertyData = {
         titre: titre.trim(),
         description: description.trim(),
         prix: Number(prix),
         type: type.trim(),
         universiteId,
+        universiteNom: matchingUni?.nom || universiteId,
         telephoneProprietaire: telephone.trim(),
         proprietaireId: auth.currentUser.uid,
         localisation: {
           adresse: adresse.trim(),
+          zoneId: selectedRegion,
+          regionId: selectedRegion,
+          region: currentReg.nom,
           villeId: selectedVille,
           ville: activeVille?.nom || 'Dakar',
           latitude,
@@ -286,7 +308,7 @@ export default function BailleurHomeScreen({ navigation }) {
       } else {
         propertyData.createdAt = new Date();
         await addDoc(collection(db, "properties"), propertyData);
-        Alert.alert("Félicitations 🎉", "Votre bien a été publié avec succès sur LogeÉtudiant.");
+        Alert.alert("Félicitations 🎉", "Votre bien a été publié avec succès sur Logetu.");
       }
 
       setModalVisible(false);
@@ -328,7 +350,7 @@ export default function BailleurHomeScreen({ navigation }) {
 
   const filteredBiens = selectedFilterZone === 'TOUS' 
     ? biens 
-    : biens.filter(item => item.universiteId === selectedFilterZone);
+    : biens.filter(item => isPropertyInZone(item, selectedFilterZone));
 
   const renderPropertyCard = (item) => (
     <View key={item.id} style={styles.propertyCard}>
@@ -355,7 +377,7 @@ export default function BailleurHomeScreen({ navigation }) {
 
         <View style={styles.cardActions}>
           <TouchableOpacity style={styles.editButton} onPress={() => handleOpenModal(item)}>
-            <Ionicons name="create-outline" size={15} color="#1E40AF" style={{ marginRight: 4 }} />
+            <Ionicons name="create-outline" size={15} color="#003880" style={{ marginRight: 4 }} />
             <Text style={styles.editButtonText}>Modifier</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.deleteButton} onPress={() => handleDeleteProperty(item.id)}>
@@ -366,6 +388,9 @@ export default function BailleurHomeScreen({ navigation }) {
       </View>
     </View>
   );
+
+  const currentRegion = getRegionById(selectedRegion);
+  const currentRegionUnis = getUniversitesByZone(selectedRegion);
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -389,7 +414,7 @@ export default function BailleurHomeScreen({ navigation }) {
             style={styles.navIconBtn}
             hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
           >
-            <Ionicons name="person-outline" size={18} color="#1E40AF" />
+            <Ionicons name="person-outline" size={18} color="#003880" />
           </TouchableOpacity>
 
           <TouchableOpacity 
@@ -397,7 +422,7 @@ export default function BailleurHomeScreen({ navigation }) {
             style={styles.navIconBtn}
             hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
           >
-            <Ionicons name="chatbubbles-outline" size={18} color="#1E40AF" />
+            <Ionicons name="chatbubbles-outline" size={18} color="#003880" />
           </TouchableOpacity>
 
           <TouchableOpacity 
@@ -441,18 +466,20 @@ export default function BailleurHomeScreen({ navigation }) {
               style={[styles.filterChip, selectedFilterZone === 'TOUS' && styles.filterChipActive]}
               onPress={() => setSelectedFilterZone('TOUS')}
             >
-              <Text style={[styles.filterText, selectedFilterZone === 'TOUS' && styles.filterTextActive]}>Tous ({biens.length})</Text>
+              <Text style={[styles.filterText, selectedFilterZone === 'TOUS' && styles.filterTextActive]}>
+                Toutes les zones ({biens.length})
+              </Text>
             </TouchableOpacity>
-            {UNIVERSITES.map((uni) => {
-              const count = biens.filter(b => b.universiteId === uni.id).length;
+            {ZONES_SENEGAL.map((zone) => {
+              const count = biens.filter(b => isPropertyInZone(b, zone.id)).length;
               return (
                 <TouchableOpacity 
-                  key={uni.id} 
-                  style={[styles.filterChip, selectedFilterZone === uni.id && styles.filterChipActive]}
-                  onPress={() => setSelectedFilterZone(uni.id)}
+                  key={zone.id} 
+                  style={[styles.filterChip, selectedFilterZone === zone.id && styles.filterChipActive]}
+                  onPress={() => setSelectedFilterZone(zone.id)}
                 >
-                  <Text style={[styles.filterText, selectedFilterZone === uni.id && styles.filterTextActive]}>
-                    {uni.id} ({count})
+                  <Text style={[styles.filterText, selectedFilterZone === zone.id && styles.filterTextActive]}>
+                    {zone.nom} ({count})
                   </Text>
                 </TouchableOpacity>
               );
@@ -463,7 +490,7 @@ export default function BailleurHomeScreen({ navigation }) {
         <Text style={styles.sectionTitle}>Mes biens publiés ({filteredBiens.length})</Text>
 
         {loading ? (
-          <ActivityIndicator size="large" color="#1E40AF" style={{ marginTop: 40 }} />
+          <ActivityIndicator size="large" color="#003880" style={{ marginTop: 40 }} />
         ) : filteredBiens.length === 0 ? (
           <View style={styles.emptyContainer}>
             <Text style={styles.emptyText}>Aucun logement trouvé pour cette sélection.</Text>
@@ -494,7 +521,7 @@ export default function BailleurHomeScreen({ navigation }) {
               {/* SECTION 1 : INFORMATIONS CLÉS */}
               <View style={styles.formSection}>
                 <View style={styles.sectionHeadingRow}>
-                  <Ionicons name="pricetag" size={16} color="#1E40AF" style={{ marginRight: 6 }} />
+                  <Ionicons name="pricetag" size={16} color="#003880" style={{ marginRight: 6 }} />
                   <Text style={styles.sectionHeading}>Informations de base</Text>
                 </View>
 
@@ -538,23 +565,47 @@ export default function BailleurHomeScreen({ navigation }) {
                 </View>
               </View>
 
-              {/* SECTION 2 : LOCALISATION & CAMPUS */}
+              {/* SECTION 2 : LOCALISATION, RÉGION & CAMPUS */}
               <View style={styles.formSection}>
                 <View style={styles.sectionHeadingRow}>
-                  <Ionicons name="location" size={16} color="#1E40AF" style={{ marginRight: 6 }} />
-                  <Text style={styles.sectionHeading}>Emplacement & Ville du logement</Text>
+                  <Ionicons name="location" size={16} color="#003880" style={{ marginRight: 6 }} />
+                  <Text style={styles.sectionHeading}>Région, Ville & Campus Universitaire</Text>
                 </View>
 
-                <Text style={styles.fieldLabel}>Ville / Région du logement *</Text>
+                {/* 1. SÉLECTION DE LA RÉGION ADMINISTRATIVE */}
+                <Text style={styles.fieldLabel}>1. Région administrative du logement *</Text>
                 <Text style={styles.fieldHelpText}>
-                  Vous pouvez être basé à Dakar (Mermoz, Plateau...) et publier un logement situé à Thiès, Saint-Louis ou autre ville.
+                  Sélectionnez la région où se trouve votre bien (chaque région synchronise ses villes et universités) :
+                </Text>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.regionScroll}>
+                  {SENEGAL_REGIONS.map((reg) => (
+                    <TouchableOpacity
+                      key={reg.id}
+                      style={[styles.regionChip, selectedRegion === reg.id && styles.regionChipSelected]}
+                      onPress={() => handleSelectRegion(reg)}
+                      activeOpacity={0.7}
+                    >
+                      <Text style={[styles.regionChipText, selectedRegion === reg.id && styles.regionChipTextSelected]}>
+                        {selectedRegion === reg.id ? '✓ ' : ''}{reg.nom}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+
+                {/* 2. SÉLECTION DE LA VILLE DE CETTE RÉGION */}
+                <Text style={styles.fieldLabel}>
+                  2. Ville / Commune ({currentRegion.nom}) *
+                </Text>
+                <Text style={styles.fieldHelpText}>
+                  {currentRegion.description} :
                 </Text>
                 <View style={styles.villeChipsWrapper}>
-                  {SENEGAL_VILLES.map((v) => (
+                  {currentRegion.villes.map((v) => (
                     <TouchableOpacity
                       key={v.id}
                       style={[styles.villeChip, selectedVille === v.id && styles.villeChipSelected]}
                       onPress={() => handleSelectVille(v)}
+                      activeOpacity={0.7}
                     >
                       <Text style={[styles.villeChipText, selectedVille === v.id && styles.villeChipTextSelected]}>
                         {selectedVille === v.id ? '✓ ' : ''}{v.nom}
@@ -563,15 +614,24 @@ export default function BailleurHomeScreen({ navigation }) {
                   ))}
                 </View>
 
-                <Text style={styles.fieldLabel}>Campus / Université partenaire *</Text>
+                {/* 3. CAMPUS & UNIVERSITÉS DE CETTE RÉGION */}
+                <Text style={styles.fieldLabel}>
+                  3. Campus / Université partenaire ({currentRegion.nom}) *
+                </Text>
+                <Text style={styles.fieldHelpText}>
+                  Universités et instituts de référence situés dans cette région et ses alentours :
+                </Text>
                 <View style={styles.zoneChipsWrapper}>
-                  {UNIVERSITES.map((uni) => (
+                  {currentRegionUnis.map((uni) => (
                     <TouchableOpacity 
                       key={uni.id} 
                       style={[styles.zoneChip, universiteId === uni.id && styles.zoneChipSelected]}
                       onPress={() => setUniversiteId(uni.id)}
+                      activeOpacity={0.7}
                     >
-                      <Text style={[styles.zoneText, universiteId === uni.id && styles.zoneTextSelected]}>{uni.nom}</Text>
+                      <Text style={[styles.zoneText, universiteId === uni.id && styles.zoneTextSelected]}>
+                        {universiteId === uni.id ? '✓ ' : ''}{uni.nom}
+                      </Text>
                     </TouchableOpacity>
                   ))}
                 </View>
@@ -579,7 +639,7 @@ export default function BailleurHomeScreen({ navigation }) {
                 <Text style={styles.fieldLabel}>Adresse précise du logement *</Text>
                 <TextInput 
                   style={styles.input} 
-                  placeholder="Cité Lamy, Sanar, ou Mermoz" 
+                  placeholder="Ex : Bambey Cité, Saint-Louis, Cité Lamy, Mermoz..." 
                   placeholderTextColor="#A0AEC0"
                   value={adresse} 
                   onChangeText={setAdresse} 
@@ -592,7 +652,7 @@ export default function BailleurHomeScreen({ navigation }) {
                   <View style={styles.gpsHeader}>
                     <View style={styles.gpsCoordsBox}>
                       <Text style={styles.gpsCoordsTitle}>
-                        Position GPS ({SENEGAL_VILLES.find(v => v.id === selectedVille)?.nom || 'Sénégal'})
+                        Position GPS ({currentRegion.nom} - {currentRegion.villes.find(v => v.id === selectedVille)?.nom || 'Sénégal'})
                       </Text>
                       <Text style={styles.gpsCoordsValue}>
                         Lat : <Text style={styles.gpsBold}>{typeof latitude === 'number' ? latitude.toFixed(5) : latitude}</Text>  |  Lng : <Text style={styles.gpsBold}>{typeof longitude === 'number' ? longitude.toFixed(5) : longitude}</Text>
@@ -616,7 +676,7 @@ export default function BailleurHomeScreen({ navigation }) {
                       style={styles.gpsVerifyBtn}
                       onPress={() => Linking.openURL(`https://www.google.com/maps/search/?api=1&query=${latitude},${longitude}`)}
                     >
-                      <Ionicons name="map-outline" size={15} color="#1E40AF" style={{ marginRight: 6 }} />
+                      <Ionicons name="map-outline" size={15} color="#003880" style={{ marginRight: 6 }} />
                       <Text style={styles.gpsVerifyBtnText}>Vérifier sur Maps</Text>
                     </TouchableOpacity>
                   </View>
@@ -626,7 +686,7 @@ export default function BailleurHomeScreen({ navigation }) {
               {/* SECTION 3 : CONTACT */}
               <View style={styles.formSection}>
                 <View style={styles.sectionHeadingRow}>
-                  <Ionicons name="call" size={16} color="#1E40AF" style={{ marginRight: 6 }} />
+                  <Ionicons name="call" size={16} color="#003880" style={{ marginRight: 6 }} />
                   <Text style={styles.sectionHeading}>Contact direct</Text>
                 </View>
 
@@ -646,7 +706,7 @@ export default function BailleurHomeScreen({ navigation }) {
               <View style={styles.formSection}>
                 <View style={styles.sectionHeaderBetween}>
                   <View style={styles.sectionHeadingRow}>
-                    <Ionicons name="images" size={16} color="#1E40AF" style={{ marginRight: 6 }} />
+                    <Ionicons name="images" size={16} color="#003880" style={{ marginRight: 6 }} />
                     <Text style={styles.sectionHeading}>Photos & Vidéos</Text>
                   </View>
                   <View style={styles.counterPill}>
@@ -655,7 +715,7 @@ export default function BailleurHomeScreen({ navigation }) {
                 </View>
 
                 <TouchableOpacity style={styles.uploadDashedZone} onPress={handlePickMedias}>
-                  <Ionicons name="cloud-upload-outline" size={38} color="#1E40AF" style={{ marginBottom: 6 }} />
+                  <Ionicons name="cloud-upload-outline" size={38} color="#003880" style={{ marginBottom: 6 }} />
                   <Text style={styles.uploadTitle}>Ajouter des photos du logement</Text>
                   <Text style={styles.uploadSubtitle}>Sélectionnez jusqu'à 8 photos pour valoriser votre annonce</Text>
                 </TouchableOpacity>
@@ -677,7 +737,7 @@ export default function BailleurHomeScreen({ navigation }) {
               {/* SECTION 5 : DESCRIPTION */}
               <View style={styles.formSection}>
                 <View style={styles.sectionHeadingRow}>
-                  <Ionicons name="document-text" size={16} color="#1E40AF" style={{ marginRight: 6 }} />
+                  <Ionicons name="document-text" size={16} color="#003880" style={{ marginRight: 6 }} />
                   <Text style={styles.sectionHeading}>Description détaillée</Text>
                 </View>
                 <TextInput 
@@ -753,8 +813,8 @@ const styles = StyleSheet.create({
   },
   navTagline: {
     fontSize: 10,
-    color: '#64748B',
-    fontWeight: '500',
+    color: '#E8A008', // Ocre doré officiel du logo
+    fontWeight: '700',
   },
   navRight: {
     flexDirection: 'row',
@@ -778,7 +838,7 @@ const styles = StyleSheet.create({
   headerSubtitle: { fontSize: 12, color: '#718096' },
   headerActions: { flexDirection: 'row', alignItems: 'center' },
   profileButton: { backgroundColor: '#EFF6FF', paddingHorizontal: 8, paddingVertical: 6, borderRadius: 6, marginRight: 6, borderWidth: 1, borderColor: '#BFDBFE' },
-  profileButtonText: { color: '#1E40AF', fontWeight: 'bold', fontSize: 12 },
+  profileButtonText: { color: '#003880', fontWeight: 'bold', fontSize: 12 },
   msgButton: { backgroundColor: '#EDF2F7', paddingHorizontal: 8, paddingVertical: 6, borderRadius: 6, marginRight: 6, borderWidth: 1, borderColor: '#CBD5E0' },
   msgButtonText: { color: '#2D3748', fontWeight: 'bold', fontSize: 12 },
   logoutButton: { padding: 6 },
@@ -786,12 +846,23 @@ const styles = StyleSheet.create({
   warningBanner: { backgroundColor: '#FEFCBF', borderWidth: 1, borderColor: '#ECC94B', padding: 12, borderRadius: 8, marginBottom: 15 },
   warningTitle: { fontSize: 13, fontWeight: 'bold', color: '#744210', marginBottom: 2 },
   warningText: { fontSize: 12, color: '#975A16', lineHeight: 16 },
-  addButton: { backgroundColor: '#1E40AF', padding: 14, borderRadius: 8, alignItems: 'center', marginBottom: 15, elevation: 2 },
+  addButton: { 
+    backgroundColor: '#E8A008', // Ocre doré officiel du logo
+    padding: 14, 
+    borderRadius: 10, 
+    alignItems: 'center', 
+    marginBottom: 15, 
+    elevation: 3,
+    shadowColor: '#E8A008',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+  },
   addButtonText: { color: '#fff', fontWeight: 'bold', fontSize: 15 },
   filterSection: { marginBottom: 15 },
   filterScroll: { paddingVertical: 5 },
   filterChip: { paddingHorizontal: 12, paddingVertical: 6, backgroundColor: '#EDF2F7', borderRadius: 20, marginRight: 8, borderWidth: 1, borderColor: '#E2E8F0' },
-  filterChipActive: { backgroundColor: '#1E40AF', borderColor: '#1E40AF' },
+  filterChipActive: { backgroundColor: '#003880', borderColor: '#003880' },
   filterText: { fontSize: 12, color: '#4A5568', fontWeight: '600' },
   filterTextActive: { color: '#fff' },
   sectionTitle: { fontSize: 16, fontWeight: 'bold', color: '#2D3748', marginBottom: 12 },
@@ -799,14 +870,24 @@ const styles = StyleSheet.create({
   emptyText: { color: '#718096', textAlign: 'center', fontSize: 14 },
   propertyCard: { backgroundColor: '#fff', borderRadius: 10, marginBottom: 15, borderWidth: 1, borderColor: '#E2E8F0', overflow: 'hidden', position: 'relative', elevation: 1 },
   propertyImage: { width: '100%', height: 140 },
-  propertyBadge: { position: 'absolute', top: 10, right: 10, backgroundColor: '#EFF6FF', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6 },
-  propertyBadgeText: { color: '#1E40AF', fontSize: 11, fontWeight: 'bold' },
+  propertyBadge: { 
+    position: 'absolute', 
+    top: 10, 
+    right: 10, 
+    backgroundColor: '#FFFBEB', 
+    paddingHorizontal: 8, 
+    paddingVertical: 4, 
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: '#FDE68A',
+  },
+  propertyBadgeText: { color: '#E8A008', fontSize: 11, fontWeight: 'bold' },
   cardContent: { padding: 12 },
   propertyTitle: { fontSize: 16, fontWeight: 'bold', color: '#1A365D', marginBottom: 4 },
   propertyType: { fontSize: 12, color: '#4A5568', marginBottom: 2, fontWeight: '600' },
   propertyAddress: { fontSize: 12, color: '#718096', marginBottom: 6 },
   propertyDescription: { fontSize: 13, color: '#718096', marginBottom: 8 },
-  propertyPrice: { fontSize: 15, fontWeight: 'bold', color: '#38A169', marginBottom: 10 },
+  propertyPrice: { fontSize: 16, fontWeight: '800', color: '#E8A008', marginBottom: 10 },
   period: { fontSize: 11, color: '#718096', fontWeight: 'normal' },
   cardActions: { flexDirection: 'row', justifyContent: 'flex-end', borderTopWidth: 1, borderTopColor: '#EDF2F7', paddingTop: 10 },
   editButton: { backgroundColor: '#EDF2F7', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 6, marginRight: 8 },
@@ -881,7 +962,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#E2E8F0'
   },
-  typeChipSelected: { backgroundColor: '#1E40AF', borderColor: '#1E40AF' },
+  typeChipSelected: { backgroundColor: '#003880', borderColor: '#003880' },
   typeChipText: { fontSize: 13, color: '#4A5568', fontWeight: '600' },
   typeChipTextSelected: { color: '#FFFFFF', fontWeight: 'bold' },
 
@@ -914,6 +995,29 @@ const styles = StyleSheet.create({
 
   // VILLES & REGIONS SENEGAL
   fieldHelpText: { fontSize: 11, color: '#718096', marginBottom: 8, fontStyle: 'italic', lineHeight: 16 },
+  regionScroll: { marginBottom: 10 },
+  regionChip: {
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    backgroundColor: '#F1F5F9',
+    borderRadius: 20,
+    marginRight: 8,
+    borderWidth: 1,
+    borderColor: '#CBD5E1',
+  },
+  regionChipSelected: {
+    backgroundColor: '#003880',
+    borderColor: '#003880',
+  },
+  regionChipText: {
+    fontSize: 12,
+    color: '#334155',
+    fontWeight: '600',
+  },
+  regionChipTextSelected: {
+    color: '#FFFFFF',
+    fontWeight: 'bold',
+  },
   villeChipsWrapper: { flexDirection: 'row', flexWrap: 'wrap', marginBottom: 12 },
   villeChip: { 
     paddingHorizontal: 12, 
@@ -925,14 +1029,14 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#CBD5E0',
   },
-  villeChipSelected: { backgroundColor: '#1E40AF', borderColor: '#1E40AF' },
+  villeChipSelected: { backgroundColor: '#003880', borderColor: '#003880' },
   villeChipText: { fontSize: 12, color: '#4A5568', fontWeight: '600' },
   villeChipTextSelected: { color: '#FFFFFF', fontWeight: 'bold' },
 
   // ZONE UNIVERSITAIRE
   zoneChipsWrapper: { flexDirection: 'row', flexWrap: 'wrap', marginBottom: 12 },
   zoneChip: { paddingHorizontal: 10, paddingVertical: 6, backgroundColor: '#EDF2F7', borderRadius: 16, marginRight: 6, marginBottom: 6 },
-  zoneChipSelected: { backgroundColor: '#1E40AF' },
+  zoneChipSelected: { backgroundColor: '#003880' },
   zoneText: { fontSize: 11, color: '#4A5568' },
   zoneTextSelected: { color: '#fff', fontWeight: 'bold' },
 
@@ -942,18 +1046,18 @@ const styles = StyleSheet.create({
   gpsCoordsBox: { backgroundColor: '#EDF2F7', padding: 8, borderRadius: 6 },
   gpsCoordsTitle: { fontSize: 10, fontWeight: 'bold', color: '#718096', textTransform: 'uppercase', marginBottom: 2 },
   gpsCoordsValue: { fontSize: 12, color: '#4A5568' },
-  gpsBold: { fontWeight: 'bold', color: '#1E40AF' },
+  gpsBold: { fontWeight: 'bold', color: '#003880' },
   gpsActionsRow: { flexDirection: 'row', justifyContent: 'space-between' },
-  gpsCaptureBtn: { flex: 1.5, backgroundColor: '#1E40AF', paddingVertical: 9, borderRadius: 6, alignItems: 'center', marginRight: 6 },
+  gpsCaptureBtn: { flex: 1.5, backgroundColor: '#003880', paddingVertical: 9, borderRadius: 6, alignItems: 'center', marginRight: 6 },
   gpsCaptureBtnText: { color: '#FFFFFF', fontSize: 12, fontWeight: 'bold' },
   gpsVerifyBtn: { flex: 1, backgroundColor: '#EFF6FF', paddingVertical: 9, borderRadius: 6, alignItems: 'center', borderWidth: 1, borderColor: '#BFDBFE' },
-  gpsVerifyBtnText: { color: '#1E40AF', fontSize: 12, fontWeight: 'bold' },
+  gpsVerifyBtnText: { color: '#003880', fontSize: 12, fontWeight: 'bold' },
 
   // UPLOAD PHOTOS EN ZONE TIRETEE
   uploadDashedZone: {
     borderWidth: 1.5,
     borderStyle: 'dashed',
-    borderColor: '#1E40AF',
+    borderColor: '#003880',
     backgroundColor: '#F0F7FF',
     borderRadius: 10,
     padding: 16,
@@ -961,10 +1065,10 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   uploadIcon: { fontSize: 28, marginBottom: 4 },
-  uploadTitle: { fontSize: 14, fontWeight: 'bold', color: '#1E40AF' },
+  uploadTitle: { fontSize: 14, fontWeight: 'bold', color: '#003880' },
   uploadSubtitle: { fontSize: 11, color: '#718096', marginTop: 2, textAlign: 'center' },
   counterPill: { backgroundColor: '#EFF6FF', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 12 },
-  counterPillText: { fontSize: 11, fontWeight: 'bold', color: '#1E40AF' },
+  counterPillText: { fontSize: 11, fontWeight: 'bold', color: '#003880' },
   previewScroll: { marginTop: 6, marginBottom: 4, maxHeight: 80 },
   previewThumbContainer: { position: 'relative', marginRight: 8 },
   previewThumb: { width: 70, height: 70, borderRadius: 8 },
@@ -975,6 +1079,6 @@ const styles = StyleSheet.create({
   modalButtons: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 8, marginBottom: 25 },
   cancelButton: { flex: 1, backgroundColor: '#EDF2F7', padding: 14, borderRadius: 10, alignItems: 'center', marginRight: 8, borderWidth: 1, borderColor: '#CBD5E0' },
   cancelButtonText: { color: '#4A5568', fontWeight: 'bold', fontSize: 14 },
-  saveButton: { flex: 2, backgroundColor: '#1E40AF', padding: 14, borderRadius: 10, alignItems: 'center', elevation: 2 },
+  saveButton: { flex: 2, backgroundColor: '#003880', padding: 14, borderRadius: 10, alignItems: 'center', elevation: 2 },
   saveButtonText: { color: '#fff', fontWeight: 'bold', fontSize: 14 },
 });

@@ -10,14 +10,18 @@ import {
   Linking,
   ScrollView,
   Image,
-  Modal
+  Modal,
+  SafeAreaView,
+  Platform,
+  StatusBar
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { db } from '../config/firebase';
 import { collection, query, where, getDocs, updateDoc, doc } from 'firebase/firestore';
 import { formatCleanFullName } from '../utils/nameFormatter';
+import { sendRealSms } from '../services/smsService';
 
-export default function AdminVerifyBailleursScreen() {
+export default function AdminVerifyBailleursScreen({ navigation }) {
   const [bailleurs, setBailleurs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [filterTab, setFilterTab] = useState('en_attente'); // 'en_attente', 'valide', 'rejete', 'tous'
@@ -63,6 +67,17 @@ export default function AdminVerifyBailleursScreen() {
                 statutValidation: nouveauStatut,
                 updatedAt: new Date()
               });
+
+              // Envoyer notification SMS directe au téléphone du bailleur
+              const bailleurObj = bailleurs.find(b => b.id === userId);
+              if (bailleurObj && bailleurObj.telephone) {
+                sendRealSms(
+                  bailleurObj.telephone, 
+                  '', 
+                  nouveauStatut === 'valide' ? 'bailleur_valide' : 'bailleur_rejete'
+                ).catch(() => {});
+              }
+
               Alert.alert("Succès ✨", `Le compte bailleur est désormais : ${nouveauStatut.toUpperCase()}`);
               fetchBailleurs();
             } catch (error) {
@@ -109,15 +124,28 @@ export default function AdminVerifyBailleursScreen() {
   if (loading) {
     return (
       <View style={styles.center}>
-        <ActivityIndicator size="large" color="#1E40AF" />
+        <ActivityIndicator size="large" color="#003880" />
         <Text style={styles.loadingText}>Vérification des profils bailleurs...</Text>
       </View>
     );
   }
 
   return (
-    <View style={styles.container}>
-      {/* ONGLET DE FILTRAGE DES STATUTS */}
+    <SafeAreaView style={styles.safeArea}>
+      {/* NAVBAR FIXE TOUT EN HAUT */}
+      <View style={styles.fixedNavbar}>
+        <TouchableOpacity style={styles.backBtn} onPress={() => navigation?.goBack()} activeOpacity={0.8}>
+          <Ionicons name="arrow-back" size={20} color="#003880" />
+          <Text style={styles.backBtnText}>Admin</Text>
+        </TouchableOpacity>
+        <Text style={styles.navbarTitle}>Certification Bailleurs</Text>
+        <TouchableOpacity style={styles.refreshIconBtn} onPress={fetchBailleurs} activeOpacity={0.8}>
+          <Ionicons name="refresh" size={18} color="#003880" />
+        </TouchableOpacity>
+      </View>
+
+      <View style={styles.container}>
+        {/* ONGLET DE FILTRAGE DES STATUTS */}
       <View style={styles.tabsContainer}>
         <TouchableOpacity 
           style={[styles.tabBtn, filterTab === 'en_attente' && styles.tabBtnActive]}
@@ -274,14 +302,60 @@ export default function AdminVerifyBailleursScreen() {
           </View>
         </View>
       </Modal>
-    </View>
+      </View>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
+  safeArea: {
+    flex: 1,
+    backgroundColor: '#FFFFFF',
+    paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight : 0,
+  },
   container: { flex: 1, padding: 15, backgroundColor: '#F7FAFC' },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#F7FAFC' },
   loadingText: { marginTop: 12, fontSize: 14, color: '#718096', fontWeight: '500' },
+  
+  // NAVBAR FIXE
+  fixedNavbar: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E2E8F0',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 3,
+    elevation: 3,
+    zIndex: 10,
+  },
+  backBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 4,
+    paddingRight: 8,
+  },
+  backBtnText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#003880',
+    marginLeft: 4,
+  },
+  navbarTitle: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: '#0F172A',
+  },
+  refreshIconBtn: {
+    padding: 6,
+    backgroundColor: '#EFF6FF',
+    borderRadius: 8,
+  },
   
   // TABS
   tabsContainer: {
@@ -311,7 +385,7 @@ const styles = StyleSheet.create({
     color: '#718096',
   },
   tabTextActive: {
-    color: '#3182CE',
+    color: '#003880',
     fontWeight: 'bold',
   },
 
@@ -338,17 +412,17 @@ const styles = StyleSheet.create({
     width: 44,
     height: 44,
     borderRadius: 22,
-    backgroundColor: '#EBF8FF',
+    backgroundColor: '#EFF6FF',
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 12,
     borderWidth: 1,
-    borderColor: '#BEE3F8',
+    borderColor: '#BFDBFE',
   },
   avatarText: {
     fontSize: 18,
     fontWeight: 'bold',
-    color: '#3182CE',
+    color: '#003880',
   },
   info: { flex: 1 },
   name: { fontSize: 15, fontWeight: 'bold', color: '#1A365D' },
@@ -372,7 +446,7 @@ const styles = StyleSheet.create({
   },
   docBtn: { 
     flexDirection: 'row', 
-    backgroundColor: '#3182CE', 
+    backgroundColor: '#003880', 
     paddingVertical: 7, 
     paddingHorizontal: 12, 
     borderRadius: 8, 

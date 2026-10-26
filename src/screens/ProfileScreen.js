@@ -279,13 +279,13 @@ export default function ProfileScreen({ navigation }) {
       {/* BARRE DE RETOUR */}
       <View style={styles.topNavRow}>
         <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
-          <Ionicons name="arrow-back" size={20} color="#1E40AF" style={{ marginRight: 4 }} />
+          <Ionicons name="arrow-back" size={20} color="#003880" style={{ marginRight: 4 }} />
           <Text style={styles.backButtonText}>Retour</Text>
         </TouchableOpacity>
         
         {isAdmin && (
           <View style={styles.adminMiniTag}>
-            <Ionicons name="shield-checkmark" size={13} color="#9B2C2C" style={{ marginRight: 4 }} />
+            <Ionicons name="shield-checkmark" size={13} color="#E8A008" style={{ marginRight: 4 }} />
             <Text style={styles.adminMiniTagText}>Panneau Admin</Text>
           </View>
         )}
@@ -294,13 +294,13 @@ export default function ProfileScreen({ navigation }) {
       {/* CARTE PRINCIPALE DU PROFIL */}
       <View style={styles.card}>
         
-        {/* AVATAR DYNAMIQUE (BLEU ROYAL HARMONISÉ) */}
+        {/* AVATAR DYNAMIQUE (BLEU DU LOGO & OR DORÉ) */}
         <View style={[
           styles.avatarContainer,
-          isAdmin && { backgroundColor: '#9B2C2C', borderColor: '#FEB2B2' },
+          isAdmin && { backgroundColor: '#003880', borderColor: '#E8A008', borderWidth: 3 },
         ]}>
           {isAdmin ? (
-            <Ionicons name="shield-checkmark" size={36} color="#FFFFFF" />
+            <Ionicons name="shield-checkmark" size={38} color="#E8A008" />
           ) : (
             <Text style={styles.avatarText}>
               {nom ? nom.charAt(0).toUpperCase() : (telephone ? telephone.charAt(0) : 'U')}
@@ -317,16 +317,16 @@ export default function ProfileScreen({ navigation }) {
                 : (email && !email.endsWith('@logeetudiant.sn') ? email : ''))}
         </Text>
 
-        {/* BADGE DE RÔLE OFFICIEL */}
+        {/* BADGE DE RÔLE OFFICIEL (BLEU & OR) */}
         <View style={[
           styles.roleBadge,
-          isAdmin && { backgroundColor: '#FED7D7', borderColor: '#FEB2B2' },
-          isBailleur && { backgroundColor: '#FEFCBF', borderColor: '#F6E05E' },
+          isAdmin && { backgroundColor: '#EFF6FF', borderColor: '#BFDBFE' },
+          isBailleur && { backgroundColor: '#FEF3C7', borderColor: '#FCD34D' },
         ]}>
           <Text style={[
             styles.roleBadgeText,
-            isAdmin && { color: '#9B2C2C' },
-            isBailleur && { color: '#744210' },
+            isAdmin && { color: '#003880' },
+            isBailleur && { color: '#92400E' },
           ]}>
             {isAdmin ? '🛡️ Administrateur Système' : (isBailleur ? '🏢 Propriétaire Bailleur' : '👨‍🎓 Compte Étudiant')}
           </Text>
@@ -335,9 +335,9 @@ export default function ProfileScreen({ navigation }) {
         {/* NOTICE SPÉCIALE ADMIN */}
         {isAdmin && (
           <View style={styles.adminNoticeBox}>
-            <Ionicons name="lock-closed" size={16} color="#2B6CB0" style={{ marginRight: 6 }} />
+            <Ionicons name="lock-closed" size={16} color="#003880" style={{ marginRight: 6 }} />
             <Text style={styles.adminNoticeText}>
-              Ce compte dispose des autorisations complètes sur la modération des logements et la sécurité de LogeÉtudiant.
+              Ce compte dispose des autorisations complètes sur la modération des logements et la sécurité de Logetu.
             </Text>
           </View>
         )}
@@ -408,7 +408,7 @@ export default function ProfileScreen({ navigation }) {
         {/* ACCÈS DIRECT AU TABLEAU DE BORD ADMIN */}
         {isAdmin && (
           <TouchableOpacity 
-            style={[styles.saveButton, { backgroundColor: '#1E40AF', marginTop: 10, borderColor: '#1E3A8A' }]} 
+            style={[styles.saveButton, { backgroundColor: '#003880', marginTop: 10, borderColor: '#003880' }]} 
             onPress={() => navigation.navigate('AdminHome')}
           >
             <View style={{ flexDirection: 'row', alignItems: 'center' }}>
@@ -430,7 +430,7 @@ export default function ProfileScreen({ navigation }) {
           }}
           activeOpacity={0.8}
         >
-          <Ionicons name="key-outline" size={18} color="#1E40AF" style={{ marginRight: 6 }} />
+          <Ionicons name="key-outline" size={18} color="#003880" style={{ marginRight: 6 }} />
           <Text style={styles.passwordBtnText}>Changer mon mot de passe</Text>
         </TouchableOpacity>
 
@@ -450,7 +450,7 @@ export default function ProfileScreen({ navigation }) {
 
             <View style={styles.modalHeaderRow}>
               <View style={styles.modalIconBox}>
-                <Ionicons name="lock-closed" size={22} color="#1E40AF" />
+                <Ionicons name="lock-closed" size={22} color="#003880" />
               </View>
               <TouchableOpacity 
                 style={styles.modalCloseBtn} 
@@ -467,7 +467,7 @@ export default function ProfileScreen({ navigation }) {
 
             {/* CHAMP NOUVEAU MOT DE PASSE */}
             <View style={[styles.modalInputContainer, { marginTop: 14 }]}>
-              <Ionicons name="key-outline" size={19} color="#1E40AF" style={{ marginRight: 8 }} />
+              <Ionicons name="key-outline" size={19} color="#003880" style={{ marginRight: 8 }} />
               <TextInput 
                 style={styles.modalInputField}
                 placeholder="Nouveau mot de passe (6 chiffres)"
@@ -485,7 +485,7 @@ export default function ProfileScreen({ navigation }) {
 
             {/* CHAMP CONFIRMATION */}
             <View style={[styles.modalInputContainer, { marginTop: 10 }]}>
-              <Ionicons name="shield-checkmark-outline" size={19} color="#1E40AF" style={{ marginRight: 8 }} />
+              <Ionicons name="shield-checkmark-outline" size={19} color="#003880" style={{ marginRight: 8 }} />
               <TextInput 
                 style={styles.modalInputField}
                 placeholder="Confirmer les 6 chiffres"
@@ -556,23 +556,23 @@ const styles = StyleSheet.create({
   },
   backButtonText: { 
     fontSize: 15, 
-    color: '#1E40AF', 
+    color: '#003880', 
     fontWeight: 'bold' 
   },
   adminMiniTag: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#FED7D7',
+    backgroundColor: '#EFF6FF',
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#FEB2B2',
+    borderColor: '#BFDBFE',
   },
   adminMiniTagText: {
     fontSize: 11,
     fontWeight: 'bold',
-    color: '#9B2C2C',
+    color: '#003880',
   },
   card: { 
     backgroundColor: '#fff', 
@@ -592,12 +592,12 @@ const styles = StyleSheet.create({
     width: 76, 
     height: 76, 
     borderRadius: 38, 
-    backgroundColor: '#1E40AF', // Bleu Royal identique authentification
+    backgroundColor: '#003880', // Bleu nuit officiel
     justifyContent: 'center', 
     alignItems: 'center', 
     marginBottom: 12,
-    borderWidth: 2.5,
-    borderColor: '#DBEAFE',
+    borderWidth: 3,
+    borderColor: '#E8A008', // Ocre doré officiel du logo
     elevation: 2,
   },
   avatarText: { 
@@ -627,7 +627,7 @@ const styles = StyleSheet.create({
     borderColor: '#BFDBFE',
   },
   roleBadgeText: { 
-    color: '#1E40AF', 
+    color: '#003880', 
     fontSize: 12, 
     fontWeight: 'bold' 
   },
@@ -638,13 +638,13 @@ const styles = StyleSheet.create({
     padding: 10,
     borderRadius: 8,
     borderLeftWidth: 3,
-    borderLeftColor: '#1E40AF',
+    borderLeftColor: '#003880',
     marginBottom: 16,
     width: '100%',
   },
   adminNoticeText: {
     fontSize: 11,
-    color: '#1E40AF',
+    color: '#003880',
     flex: 1,
     lineHeight: 16,
   },
@@ -669,7 +669,7 @@ const styles = StyleSheet.create({
   },
   saveButton: { 
     width: '100%', 
-    backgroundColor: '#1E40AF', // Remplacé par Bleu Royal
+    backgroundColor: '#003880', // Remplacé par Bleu Royal
     padding: 14, 
     borderRadius: 10, 
     alignItems: 'center', 
@@ -699,7 +699,7 @@ const styles = StyleSheet.create({
     borderRadius: 10,
   },
   passwordBtnText: {
-    color: '#1E40AF',
+    color: '#003880',
     fontWeight: 'bold',
     fontSize: 13,
   },
@@ -786,7 +786,7 @@ const styles = StyleSheet.create({
     color: '#0F172A',
   },
   modalActionBtn: {
-    backgroundColor: '#1E40AF',
+    backgroundColor: '#003880',
     borderRadius: 12,
     paddingVertical: 14,
     alignItems: 'center',

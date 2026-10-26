@@ -95,7 +95,7 @@ export default function ColocatairesScreen({ navigation }) {
     }
 
     const prenom = nomEtudiant ? nomEtudiant.split(' ')[0] : 'camarade';
-    const message = `Bonjour ${prenom}, j'ai vu votre annonce de colocation (${universiteId || 'LogeÉtudiant'}) sur l'application LogeÉtudiant. Êtes-vous toujours à la recherche d'un colocataire ?`;
+    const message = `Bonjour ${prenom}, j'ai vu votre annonce de colocation (${universiteId || 'Logetu'}) sur l'application Logetu. Êtes-vous toujours à la recherche d'un colocataire ?`;
     const whatsappUrl = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(message)}`;
 
     Linking.openURL(whatsappUrl).catch((err) => {
@@ -139,7 +139,7 @@ export default function ColocatairesScreen({ navigation }) {
           style={styles.navBackBtn}
           hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
         >
-          <Ionicons name="arrow-back" size={22} color="#1E40AF" />
+          <Ionicons name="arrow-back" size={22} color="#003880" />
         </TouchableOpacity>
 
         <Text style={styles.navTitle}>Recherche Colocataires</Text>
@@ -175,7 +175,7 @@ export default function ColocatairesScreen({ navigation }) {
 
         {/* Liste des annonces */}
         {loading ? (
-          <ActivityIndicator size="large" color="#1E40AF" style={{ marginTop: 40 }} />
+          <ActivityIndicator size="large" color="#003880" style={{ marginTop: 40 }} />
         ) : annonces.length === 0 ? (
           <View style={styles.emptyContainer}>
             <Ionicons name="people-outline" size={48} color="#94A3B8" style={{ marginBottom: 10 }} />
@@ -194,7 +194,7 @@ export default function ColocatairesScreen({ navigation }) {
                 <View style={styles.card}>
                   <View style={styles.cardHeader}>
                     <View style={styles.authorRow}>
-                      <Ionicons name="person-circle" size={20} color="#1E40AF" style={{ marginRight: 6 }} />
+                      <Ionicons name="person-circle" size={20} color="#003880" style={{ marginRight: 6 }} />
                       <Text style={styles.authorName}>{formatCleanFullName(item.nomEtudiant)}</Text>
                       {isMyPost && (
                         <View style={styles.myPostBadge}>
@@ -250,7 +250,7 @@ export default function ColocatairesScreen({ navigation }) {
                             onPress={() => navigation.navigate('AjouterColocAnnonce', { annonceToEdit: item })}
                             activeOpacity={0.8}
                           >
-                            <Ionicons name="create-outline" size={14} color="#1E40AF" style={{ marginRight: 4 }} />
+                            <Ionicons name="create-outline" size={14} color="#003880" style={{ marginRight: 4 }} />
                             <Text style={styles.editButtonText}>Modifier</Text>
                           </TouchableOpacity>
 
@@ -307,7 +307,7 @@ const styles = StyleSheet.create({
     color: '#0F172A',
   },
   addButton: { 
-    backgroundColor: '#1E40AF', 
+    backgroundColor: '#003880', 
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 12, 
@@ -328,7 +328,7 @@ const styles = StyleSheet.create({
     marginRight: 8, 
     height: 36 
   },
-  filterChipSelected: { backgroundColor: '#1E40AF', borderColor: '#1E40AF' },
+  filterChipSelected: { backgroundColor: '#003880', borderColor: '#003880' },
   filterText: { fontSize: 12, color: '#4A5568', fontWeight: '500' },
   filterTextSelected: { color: '#FFFFFF', fontWeight: 'bold' },
   emptyContainer: { padding: 40, alignItems: 'center', justifyContent: 'center' },
@@ -352,7 +352,7 @@ const styles = StyleSheet.create({
   myPostBadge: { backgroundColor: '#FEFCBF', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 10, borderWidth: 1, borderColor: '#F6E05E', marginLeft: 8 },
   myPostText: { fontSize: 10, fontWeight: 'bold', color: '#744210' },
   badge: { backgroundColor: '#EFF6FF', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 6, borderWidth: 1, borderColor: '#BFDBFE' },
-  badgeText: { color: '#1E40AF', fontSize: 11, fontWeight: 'bold' },
+  badgeText: { color: '#003880', fontSize: 11, fontWeight: 'bold' },
   description: { fontSize: 14, color: '#475569', marginBottom: 12, lineHeight: 20 },
   cardFooter: { borderTopWidth: 1, borderTopColor: '#F1F5F9', paddingTop: 10 },
   budgetRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
@@ -369,7 +369,7 @@ const styles = StyleSheet.create({
   },
   whatsappButtonText: { color: '#FFF', fontWeight: 'bold', fontSize: 12 },
   chatButton: { 
-    backgroundColor: '#1E40AF', 
+    backgroundColor: '#003880', 
     flexDirection: 'row', 
     alignItems: 'center', 
     paddingHorizontal: 12, 
@@ -388,7 +388,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   editButtonText: { 
-    color: '#1E40AF', 
+    color: '#003880', 
     fontWeight: 'bold', 
     fontSize: 12 
   },

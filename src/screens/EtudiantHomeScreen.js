@@ -19,28 +19,12 @@ import { collection, getDocs, query, where, doc, setDoc, deleteDoc } from 'fireb
 import { db, auth } from '../config/firebase';
 import { logoutUser } from '../services/authService';
 import { formatCleanFullName } from '../utils/nameFormatter';
+import { UNIVERSITES, SENEGAL_REGIONS } from '../services/universityService';
 
-const UNIVERSITES = [
+const ZONES_UNIVERSITAIRES = [
   { id: 'TOUS', nom: 'Toutes les zones' },
   { id: 'FAVORIS', nom: 'Mes favoris' },
-  { id: 'UCAD', nom: 'UCAD (Dakar)' },
-  { id: 'UGB', nom: 'UGB (Saint-Louis)' },
-  { id: 'USSEIN', nom: 'USSEIN (Sine Saloum)' },
-  { id: 'UASZ', nom: 'UASZ (Ziguinchor)' },
-  { id: 'UIDT', nom: 'UIDT (Thiès)' },
-  { id: 'UAM', nom: 'UAM (Diamniadio)' },
-  { id: 'URDFS', nom: 'URDFS (Dakar-Plateau)' },
-  { id: 'USO', nom: 'USO (Tambacounda)' },
-  { id: 'ISM', nom: 'ISM (Dakar)' },
-  { id: 'IAM', nom: 'IAM (Dakar)' },
-  { id: 'SupDeCo', nom: 'SupDeCo (Dakar)' },
-  { id: 'ESMT', nom: 'ESMT (Dakar)' },
-  { id: 'CESAG', nom: 'CESAG (Dakar)' },
-  { id: 'UCAO', nom: 'UCAO (Dakar)' },
-  { id: 'DIT', nom: 'DIT (Dakar)' },
-  { id: 'AFI-UE', nom: 'AFI-UE (Dakar)' },
-  { id: 'ESEBAT', nom: 'ESEBAT (Dakar)' },
-  { id: 'CEFAS', nom: 'CEFAS (Dakar)' },
+  ...UNIVERSITES.map(u => ({ id: u.id, nom: `${u.id} (${u.ville})` }))
 ];
 
 const TYPE_SUGGESTIONS = ['Tous', 'Appartement', 'Studio', 'Chambre', 'Villa', 'Colocation'];
@@ -80,56 +64,64 @@ export default function EtudiantHomeScreen({ navigation }) {
 
   const fetchFavorisIds = async () => {
     try {
-      if (!auth.currentUser) return;
+      if (!auth.currentUser) return [];
       const favSnapshot = await getDocs(collection(db, "users", auth.currentUser.uid, "favorites"));
       const ids = [];
       favSnapshot.forEach((docSnap) => {
         ids.push(docSnap.id);
       });
       setFavorisIds(ids);
+      return ids;
     } catch (error) {
       console.error("Erreur chargement favoris :", error);
+      return [];
     }
   };
 
   const fetchBiens = async (uniFilter = 'TOUS') => {
     setLoading(true);
     try {
-      await fetchFavorisIds();
-      
-      // 1. Logements des BAILLEURS UNIQUEMENT
+      // 1. Préparation des requêtes
       let q = collection(db, "properties");
       if (uniFilter !== 'TOUS' && uniFilter !== 'FAVORIS') {
         q = query(collection(db, "properties"), where("universiteId", "==", uniFilter));
       }
-      
-      const querySnapshot = await getDocs(q);
-      let list = [];
-      querySnapshot.forEach((docSnap) => {
-        list.push({ id: docSnap.id, ...docSnap.data() });
-      });
 
-      if (uniFilter === 'FAVORIS') {
-        list = list.filter((item) => favorisIds.includes(item.id));
+      let colocQ = collection(db, "coloc_annonces");
+      if (uniFilter !== 'TOUS' && uniFilter !== 'FAVORIS') {
+        colocQ = query(collection(db, "coloc_annonces"), where("universiteId", "==", uniFilter));
       }
 
-      setBiens(list); // SÉPARÉ : uniquement les annonces des bailleurs
+      // 2. Exécution ultra-rapide EN PARALLÈLE
+      const [currentFavIds, querySnapshot, colocSnapshot] = await Promise.all([
+        fetchFavorisIds(),
+        getDocs(q).catch(() => ({ empty: true, forEach: () => {} })),
+        getDocs(colocQ).catch(() => ({ empty: true, forEach: () => {} }))
+      ]);
 
-      // 2. Annonces de COLOCATION des ÉTUDIANTS UNIQUEMENT (SÉPARATION TOTALE)
-      try {
-        let colocQ = collection(db, "coloc_annonces");
-        if (uniFilter !== 'TOUS' && uniFilter !== 'FAVORIS') {
-          colocQ = query(collection(db, "coloc_annonces"), where("universiteId", "==", uniFilter));
-        }
-        const colocSnapshot = await getDocs(colocQ);
-        let colocList = [];
+      // 3. Traitement des logements bailleurs
+      let list = [];
+      if (querySnapshot && !querySnapshot.empty) {
+        querySnapshot.forEach((docSnap) => {
+          list.push({ id: docSnap.id, ...docSnap.data() });
+        });
+      }
+
+      if (uniFilter === 'FAVORIS') {
+        const activeFavs = currentFavIds || favorisIds;
+        list = list.filter((item) => activeFavs.includes(item.id));
+      }
+
+      setBiens(list);
+
+      // 4. Traitement des annonces colocation
+      let colocList = [];
+      if (colocSnapshot && !colocSnapshot.empty) {
         colocSnapshot.forEach((docSnap) => {
           colocList.push({ id: docSnap.id, ...docSnap.data() });
         });
-        setColocAnnonces(colocList); // SÉPARÉ : uniquement les recherches des étudiants
-      } catch (colocErr) {
-        console.error("Erreur chargement annonces colocation :", colocErr);
       }
+      setColocAnnonces(colocList);
     } catch (error) {
       console.error("Erreur lors du chargement des biens :", error);
     } finally {
@@ -180,6 +172,8 @@ export default function EtudiantHomeScreen({ navigation }) {
         item.description?.toLowerCase().includes(q) ||
         item.localisation?.adresse?.toLowerCase().includes(q) ||
         item.localisation?.ville?.toLowerCase().includes(q) ||
+        item.localisation?.region?.toLowerCase().includes(q) ||
+        item.universiteId?.toLowerCase().includes(q) ||
         item.type?.toLowerCase().includes(q);
 
       const matchesPrice = maxPrice === '' || Number(item.prix) <= Number(maxPrice);
@@ -230,7 +224,7 @@ export default function EtudiantHomeScreen({ navigation }) {
     }
 
     const prenom = nomEtudiant ? nomEtudiant.split(' ')[0] : 'camarade';
-    const message = `Bonjour ${prenom}, j'ai vu votre recherche de colocation (${universiteId || 'Campus'}) sur LogeÉtudiant. Êtes-vous toujours à la recherche d'un colocataire ?`;
+    const message = `Bonjour ${prenom}, j'ai vu votre recherche de colocation (${universiteId || 'Campus'}) sur Logetu. Êtes-vous toujours à la recherche d'un colocataire ?`;
     const whatsappUrl = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(message)}`;
 
     Linking.openURL(whatsappUrl).catch(() => {
@@ -277,7 +271,7 @@ export default function EtudiantHomeScreen({ navigation }) {
       cleanPhone = `221${cleanPhone}`;
     }
 
-    const message = `Bonjour, je suis intéressé(e) par votre logement "${titreBien || 'étudiant'}" vu sur LogeÉtudiant. Est-il toujours disponible ?`;
+    const message = `Bonjour, je suis intéressé(e) par votre logement "${titreBien || 'étudiant'}" vu sur Logetu. Est-il toujours disponible ?`;
     const whatsappUrl = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(message)}`;
 
     Linking.openURL(whatsappUrl).catch(() => {
@@ -297,8 +291,8 @@ export default function EtudiantHomeScreen({ navigation }) {
             resizeMode="contain" 
           />
           <View>
-            <Text style={styles.navBrand}>LogeÉtudiant</Text>
-            <Text style={styles.navTagline}>Logements universitaires au Sénégal</Text>
+            <Text style={styles.navBrand}>Logetu</Text>
+            <Text style={styles.navTagline}>Logements près de votre campus</Text>
           </View>
         </View>
 
@@ -308,7 +302,7 @@ export default function EtudiantHomeScreen({ navigation }) {
             onPress={() => navigation.navigate('Conversations')}
             hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
           >
-            <Ionicons name="chatbubbles-outline" size={20} color="#1E40AF" />
+            <Ionicons name="chatbubbles-outline" size={20} color="#003880" />
           </TouchableOpacity>
 
           <TouchableOpacity 
@@ -316,7 +310,7 @@ export default function EtudiantHomeScreen({ navigation }) {
             onPress={() => navigation.navigate('ColocatairesScreen')}
             hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
           >
-            <Ionicons name="people-outline" size={20} color="#1E40AF" />
+            <Ionicons name="people-outline" size={20} color="#003880" />
           </TouchableOpacity>
 
           <TouchableOpacity 
@@ -337,7 +331,7 @@ export default function EtudiantHomeScreen({ navigation }) {
         {/* BANNIÈRE D'ACCÈS RAPIDE (MESSAGES & COLOC) */}
         <View style={styles.quickAccessRow}>
           <TouchableOpacity 
-            style={[styles.quickCard, { backgroundColor: '#1E40AF' }]}
+            style={[styles.quickCard, { backgroundColor: '#003880' }]}
             onPress={() => navigation.navigate('Conversations')}
             activeOpacity={0.85}
           >
@@ -346,7 +340,7 @@ export default function EtudiantHomeScreen({ navigation }) {
           </TouchableOpacity>
 
           <TouchableOpacity 
-            style={[styles.quickCard, { backgroundColor: '#1E40AF' }]}
+            style={[styles.quickCard, { backgroundColor: '#E8A008' }]}
             onPress={() => navigation.navigate('ColocatairesScreen')}
             activeOpacity={0.85}
           >
@@ -358,7 +352,7 @@ export default function EtudiantHomeScreen({ navigation }) {
         {/* SECTION RECHERCHE & FILTRE DE PRIX (LIMITATION DE CARACTÈRES) */}
         <View style={styles.searchContainer}>
           <View style={styles.searchInputWrapper}>
-            <Ionicons name="search-outline" size={18} color="#1E40AF" style={{ marginRight: 6 }} />
+            <Ionicons name="search-outline" size={18} color="#003880" style={{ marginRight: 6 }} />
             <TextInput 
               style={styles.searchInput}
               placeholder="(ex: Appartement)"
@@ -415,10 +409,10 @@ export default function EtudiantHomeScreen({ navigation }) {
         {/* FILTRES PAR ZONES UNIVERSITAIRES */}
         <View style={styles.zonesSection}>
           <Text style={styles.sectionHeading}>
-            <Ionicons name="school-outline" size={15} color="#1E40AF" /> Campus & Villes :
+            <Ionicons name="school-outline" size={15} color="#003880" /> Campus & Villes Universitaires :
           </Text>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filterScroll}>
-            {UNIVERSITES.map((uni) => (
+            {ZONES_UNIVERSITAIRES.map((uni) => (
               <TouchableOpacity
                 key={uni.id}
                 style={[
@@ -449,7 +443,7 @@ export default function EtudiantHomeScreen({ navigation }) {
             <Ionicons 
               name="home" 
               size={15} 
-              color={feedMode === 'bailleurs' ? '#FFFFFF' : '#1E40AF'} 
+              color={feedMode === 'bailleurs' ? '#FFFFFF' : '#003880'} 
               style={{ marginRight: 6 }} 
             />
             <Text style={[styles.segmentedTabText, feedMode === 'bailleurs' && styles.segmentedTabTextActive]}>
@@ -458,14 +452,14 @@ export default function EtudiantHomeScreen({ navigation }) {
           </TouchableOpacity>
 
           <TouchableOpacity
-            style={[styles.segmentedTab, feedMode === 'colocataires' && styles.segmentedTabActive]}
+            style={[styles.segmentedTab, feedMode === 'colocataires' && { backgroundColor: '#E8A008' }]}
             onPress={() => setFeedMode('colocataires')}
             activeOpacity={0.85}
           >
             <Ionicons 
               name="people" 
               size={15} 
-              color={feedMode === 'colocataires' ? '#FFFFFF' : '#1E40AF'} 
+              color={feedMode === 'colocataires' ? '#FFFFFF' : '#E8A008'} 
               style={{ marginRight: 6 }} 
             />
             <Text style={[styles.segmentedTabText, feedMode === 'colocataires' && styles.segmentedTabTextActive]}>
@@ -479,7 +473,7 @@ export default function EtudiantHomeScreen({ navigation }) {
           <View style={styles.colocHighlightSection}>
             <View style={styles.colocHighlightHeader}>
               <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                <Ionicons name="people" size={15} color="#1E40AF" style={{ marginRight: 6 }} />
+                <Ionicons name="people" size={15} color="#003880" style={{ marginRight: 6 }} />
                 <Text style={styles.colocHighlightTitle}>Recherches de Colocataires récentes</Text>
               </View>
               <TouchableOpacity onPress={() => setFeedMode('colocataires')}>
@@ -495,7 +489,7 @@ export default function EtudiantHomeScreen({ navigation }) {
                   activeOpacity={0.85}
                 >
                   <View style={styles.colocMiniTop}>
-                    <Ionicons name="person-circle" size={16} color="#1E40AF" style={{ marginRight: 4 }} />
+                    <Ionicons name="person-circle" size={16} color="#003880" style={{ marginRight: 4 }} />
                     <Text style={styles.colocMiniName} numberOfLines={1}>{formatCleanFullName(colocItem.nomEtudiant)}</Text>
                     <View style={styles.colocMiniBadge}>
                       <Text style={styles.colocMiniBadgeText}>{colocItem.universiteId}</Text>
@@ -538,7 +532,7 @@ export default function EtudiantHomeScreen({ navigation }) {
             {/* LISTE DES LOGEMENTS */}
             {loading ? (
               <View style={styles.loadingBox}>
-                <ActivityIndicator size="large" color="#1E40AF" />
+                <ActivityIndicator size="large" color="#003880" />
                 <Text style={styles.loadingText}>Chargement des logements...</Text>
               </View>
             ) : displayedBiens.length === 0 ? (
@@ -615,12 +609,12 @@ export default function EtudiantHomeScreen({ navigation }) {
                           Linking.openURL(`https://www.google.com/maps/search/?api=1&query=${lat},${lng}`);
                         }}
                       >
-                        <Ionicons name="location" size={16} color="#1E40AF" style={{ marginRight: 6 }} />
+                        <Ionicons name="location" size={16} color="#003880" style={{ marginRight: 6 }} />
                         <Text style={styles.locationText} numberOfLines={1}>
                           {item.localisation?.ville ? `${item.localisation.ville} - ` : ''}
                           {item.localisation?.adresse || 'Localisation disponible'}
                         </Text>
-                        <Ionicons name="chevron-forward" size={14} color="#1E40AF" style={{ marginLeft: 'auto' }} />
+                        <Ionicons name="chevron-forward" size={14} color="#003880" style={{ marginLeft: 'auto' }} />
                       </TouchableOpacity>
 
                       {/* FOOTER : PRIX ET BOUTON WHATSAPP */}
@@ -667,7 +661,7 @@ export default function EtudiantHomeScreen({ navigation }) {
 
             {loading ? (
               <View style={styles.loadingBox}>
-                <ActivityIndicator size="large" color="#1E40AF" />
+                <ActivityIndicator size="large" color="#003880" />
                 <Text style={styles.loadingText}>Chargement des annonces...</Text>
               </View>
             ) : displayedColocs.length === 0 ? (
@@ -682,7 +676,7 @@ export default function EtudiantHomeScreen({ navigation }) {
                   <View style={styles.cardBody}>
                     <View style={styles.colocCardHeader}>
                       <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1, marginRight: 8 }}>
-                        <Ionicons name="person-circle" size={26} color="#1E40AF" style={{ marginRight: 8 }} />
+                        <Ionicons name="person-circle" size={26} color="#003880" style={{ marginRight: 8 }} />
                         <View style={{ flex: 1 }}>
                           <Text style={styles.cardTitle} numberOfLines={1}>{formatCleanFullName(coloc.nomEtudiant)}</Text>
                           <Text style={styles.cardType}>
@@ -690,7 +684,7 @@ export default function EtudiantHomeScreen({ navigation }) {
                           </Text>
                         </View>
                       </View>
-                      <View style={[styles.campusBadge, { backgroundColor: '#1E40AF', position: 'relative', top: 0, left: 0 }]}>
+                      <View style={[styles.campusBadge, { backgroundColor: '#003880', position: 'relative', top: 0, left: 0 }]}>
                         <Text style={[styles.campusBadgeText, { color: '#FFFFFF' }]}>{coloc.universiteId}</Text>
                       </View>
                     </View>
@@ -714,7 +708,7 @@ export default function EtudiantHomeScreen({ navigation }) {
                         </TouchableOpacity>
 
                         <TouchableOpacity 
-                          style={[styles.whatsappBtn, { backgroundColor: '#1E40AF' }]}
+                          style={[styles.whatsappBtn, { backgroundColor: '#003880' }]}
                           onPress={() => navigation.navigate('Chat', { 
                             recipientId: coloc.etudiantId, 
                             recipientName: formatCleanFullName(coloc.nomEtudiant) || "Étudiant",
@@ -750,7 +744,7 @@ export default function EtudiantHomeScreen({ navigation }) {
           <Ionicons 
             name={activeBottomTab === 'accueil' ? "home" : "home-outline"} 
             size={22} 
-            color={activeBottomTab === 'accueil' ? "#1E40AF" : "#64748B"} 
+            color={activeBottomTab === 'accueil' ? "#003880" : "#64748B"} 
           />
           <Text style={[styles.tabLabel, activeBottomTab === 'accueil' && styles.tabLabelActive]}>
             Accueil
@@ -765,9 +759,9 @@ export default function EtudiantHomeScreen({ navigation }) {
           <Ionicons 
             name={activeBottomTab === 'nouveautes' ? "flash" : "flash-outline"} 
             size={22} 
-            color={activeBottomTab === 'nouveautes' ? "#1E40AF" : "#64748B"} 
+            color={activeBottomTab === 'nouveautes' ? "#E8A008" : "#64748B"} 
           />
-          <Text style={[styles.tabLabel, activeBottomTab === 'nouveautes' && styles.tabLabelActive]}>
+          <Text style={[styles.tabLabel, activeBottomTab === 'nouveautes' && { color: '#E8A008', fontWeight: 'bold' }]}>
             Nouveautés
           </Text>
         </TouchableOpacity>
@@ -780,7 +774,7 @@ export default function EtudiantHomeScreen({ navigation }) {
           <Ionicons 
             name={activeBottomTab === 'recents' ? "time" : "time-outline"} 
             size={22} 
-            color={activeBottomTab === 'recents' ? "#1E40AF" : "#64748B"} 
+            color={activeBottomTab === 'recents' ? "#003880" : "#64748B"} 
           />
           <Text style={[styles.tabLabel, activeBottomTab === 'recents' && styles.tabLabelActive]}>
             Consultés
@@ -861,8 +855,8 @@ const styles = StyleSheet.create({
   },
   navTagline: {
     fontSize: 10,
-    color: '#64748B',
-    fontWeight: '500',
+    color: '#E8A008', // Ocre doré officiel du logo
+    fontWeight: '700',
   },
   navRight: {
     flexDirection: 'row',
@@ -899,7 +893,7 @@ const styles = StyleSheet.create({
     paddingVertical: 11,
     borderRadius: 12,
     marginHorizontal: 4,
-    shadowColor: '#1E40AF',
+    shadowColor: '#003880',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.15,
     shadowRadius: 4,
@@ -978,8 +972,8 @@ const styles = StyleSheet.create({
     marginRight: 6,
   },
   suggestionChipSelected: {
-    backgroundColor: '#1E40AF',
-    borderColor: '#1E40AF',
+    backgroundColor: '#003880',
+    borderColor: '#003880',
   },
   suggestionChipText: {
     fontSize: 12,
@@ -1010,8 +1004,8 @@ const styles = StyleSheet.create({
     borderRadius: 9,
   },
   segmentedTabActive: {
-    backgroundColor: '#1E40AF',
-    shadowColor: '#1E40AF',
+    backgroundColor: '#003880',
+    shadowColor: '#003880',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.2,
     shadowRadius: 2,
@@ -1020,7 +1014,7 @@ const styles = StyleSheet.create({
   segmentedTabText: {
     fontSize: 12,
     fontWeight: '700',
-    color: '#1E40AF',
+    color: '#003880',
   },
   segmentedTabTextActive: {
     color: '#FFFFFF',
@@ -1049,7 +1043,7 @@ const styles = StyleSheet.create({
   colocHighlightLink: {
     fontSize: 11,
     fontWeight: '700',
-    color: '#1E40AF',
+    color: '#003880',
   },
   colocHighlightScroll: {
     flexDirection: 'row',
@@ -1085,7 +1079,7 @@ const styles = StyleSheet.create({
   colocMiniBadgeText: {
     fontSize: 9,
     fontWeight: 'bold',
-    color: '#1E40AF',
+    color: '#003880',
   },
   colocMiniDesc: {
     fontSize: 11,
@@ -1138,10 +1132,15 @@ const styles = StyleSheet.create({
   postColocBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#1E40AF',
+    backgroundColor: '#E8A008', // Ocre doré officiel du logo
     paddingHorizontal: 12,
     paddingVertical: 7,
     borderRadius: 8,
+    shadowColor: '#E8A008',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 3,
+    elevation: 2,
   },
   postColocBtnText: {
     color: '#FFFFFF',
@@ -1173,8 +1172,8 @@ const styles = StyleSheet.create({
     marginRight: 8,
   },
   filterChipSelected: {
-    backgroundColor: '#1E40AF',
-    borderColor: '#1E40AF',
+    backgroundColor: '#003880',
+    borderColor: '#003880',
   },
   filterChipText: {
     fontSize: 12,
@@ -1290,7 +1289,7 @@ const styles = StyleSheet.create({
   },
   locationText: {
     fontSize: 12,
-    color: '#1E40AF',
+    color: '#003880',
     fontWeight: '600',
     flex: 1,
   },
@@ -1305,7 +1304,7 @@ const styles = StyleSheet.create({
   priceAmount: {
     fontSize: 17,
     fontWeight: '800',
-    color: '#1E40AF',
+    color: '#003880',
   },
   pricePeriod: {
     fontSize: 11,
@@ -1396,7 +1395,7 @@ const styles = StyleSheet.create({
     marginTop: 3,
   },
   tabLabelActive: {
-    color: '#1E40AF',
+    color: '#003880',
     fontWeight: '800',
   },
 });

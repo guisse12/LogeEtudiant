@@ -62,7 +62,7 @@ export default function FavorisScreen({ navigation }) {
       cleanPhone = `221${cleanPhone}`;
     }
 
-    const message = `Bonjour, je suis intéressé(e) par votre logement "${titre || 'étudiant'}" vu dans mes favoris sur LogeÉtudiant.`;
+    const message = `Bonjour, je suis intéressé(e) par votre logement "${titre || 'étudiant'}" vu dans mes favoris sur Logetu.`;
     const url = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(message)}`;
 
     Linking.openURL(url).catch((err) => {
@@ -74,7 +74,7 @@ export default function FavorisScreen({ navigation }) {
   if (loading) {
     return (
       <View style={styles.loaderContainer}>
-        <ActivityIndicator size="large" color="#1E40AF" />
+        <ActivityIndicator size="large" color="#003880" />
       </View>
     );
   }
@@ -132,7 +132,7 @@ export default function FavorisScreen({ navigation }) {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F8F9FA', padding: 16 },
   loaderContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  title: { fontSize: 20, fontWeight: 'bold', color: '#1E40AF', marginBottom: 16, marginTop: 10 },
+  title: { fontSize: 20, fontWeight: 'bold', color: '#003880', marginBottom: 16, marginTop: 10 },
   emptyContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 20 },
   emptyText: { color: '#718096', textAlign: 'center', fontSize: 15 },
   card: { backgroundColor: '#fff', borderRadius: 10, marginBottom: 15, overflow: 'hidden', borderWidth: 1, borderColor: '#E2E8F0', position: 'relative' },
@@ -140,8 +140,8 @@ const styles = StyleSheet.create({
   removeBtn: { position: 'absolute', top: 10, right: 10, backgroundColor: '#fff', padding: 6, borderRadius: 20, elevation: 2 },
   infoContainer: { padding: 12 },
   cardTitle: { fontSize: 16, fontWeight: 'bold', color: '#2D3748', marginBottom: 4 },
-  cardPrice: { fontSize: 15, fontWeight: 'bold', color: '#38A169', marginBottom: 4 },
+  cardPrice: { fontSize: 15, fontWeight: 'bold', color: '#003880', marginBottom: 4 },
   cardAddress: { fontSize: 13, color: '#718096', marginBottom: 10 },
-  contactBtn: { backgroundColor: '#1E40AF', padding: 8, borderRadius: 6, alignItems: 'center' },
+  contactBtn: { backgroundColor: '#003880', padding: 8, borderRadius: 6, alignItems: 'center' },
   contactBtnText: { color: '#fff', fontWeight: 'bold', fontSize: 13 },
 });

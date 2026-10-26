@@ -6,13 +6,16 @@ import {
   FlatList, 
   TouchableOpacity, 
   Alert, 
-  ActivityIndicator 
+  ActivityIndicator,
+  SafeAreaView,
+  Platform,
+  StatusBar
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { db } from '../config/firebase';
 import { collection, getDocs, deleteDoc, doc } from 'firebase/firestore';
 
-export default function AdminReportsScreen() {
+export default function AdminReportsScreen({ navigation }) {
   const [reports, setReports] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -71,8 +74,21 @@ export default function AdminReportsScreen() {
   }
 
   return (
-    <View style={styles.container}>
-      {/* BANNIÈRE DE CONTRÔLE */}
+    <SafeAreaView style={styles.safeArea}>
+      {/* NAVBAR ADMINISTRATIVE FIXE */}
+      <View style={styles.fixedNavbar}>
+        <TouchableOpacity style={styles.backBtn} onPress={() => navigation?.goBack()} activeOpacity={0.8}>
+          <Ionicons name="arrow-back" size={20} color="#003880" />
+          <Text style={styles.backBtnText}>Admin</Text>
+        </TouchableOpacity>
+        <Text style={styles.navbarTitle}>Signalements & Fraudes</Text>
+        <TouchableOpacity style={styles.refreshIconBtn} onPress={fetchReports} activeOpacity={0.8}>
+          <Ionicons name="refresh" size={18} color="#003880" />
+        </TouchableOpacity>
+      </View>
+
+      <View style={styles.container}>
+        {/* BANNIÈRE DE CONTRÔLE */}
       <View style={styles.summaryBox}>
         <View style={styles.summaryIconBox}>
           <Ionicons 
@@ -156,14 +172,60 @@ export default function AdminReportsScreen() {
           </View>
         }
       />
-    </View>
+      </View>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
+  safeArea: {
+    flex: 1,
+    backgroundColor: '#FFFFFF',
+    paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight : 0,
+  },
   container: { flex: 1, padding: 15, backgroundColor: '#F7FAFC' },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#F7FAFC' },
   loadingText: { marginTop: 12, fontSize: 14, color: '#718096', fontWeight: '500' },
+
+  // NAVBAR FIXE
+  fixedNavbar: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E2E8F0',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 3,
+    elevation: 3,
+    zIndex: 10,
+  },
+  backBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 4,
+    paddingRight: 8,
+  },
+  backBtnText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#003880',
+    marginLeft: 4,
+  },
+  navbarTitle: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: '#0F172A',
+  },
+  refreshIconBtn: {
+    padding: 6,
+    backgroundColor: '#EFF6FF',
+    borderRadius: 8,
+  },
 
   // SUMMARY BOX
   summaryBox: {

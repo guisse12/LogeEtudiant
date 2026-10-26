@@ -13,15 +13,34 @@ import {
   getDocs, 
   query, 
   where, 
+  limit,
   updateDoc 
 } from "firebase/firestore";
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { auth, db } from "../config/firebase";
+import { sendRealSms } from "./smsService";
 
 // Table de correspondance d'urgence (Administrateur / Bailleurs historiques)
 const KNOWN_PHONE_EMAIL_MAP = {
   '763318157': 'aeers1997@gmail.com',
   '221763318157': 'aeers1997@gmail.com',
+};
+
+// Vérifier si une erreur est due à un défaut de connexion réseau / Internet
+export const isNetworkError = (error) => {
+  if (!error) return false;
+  const msg = String(error.message || '').toLowerCase();
+  const code = String(error.code || '').toLowerCase();
+  return (
+    code === 'auth/network-request-failed' ||
+    code === 'unavailable' ||
+    msg.includes('network') ||
+    msg.includes('offline') ||
+    msg.includes('internet') ||
+    msg.includes('failed to fetch') ||
+    msg.includes('enotfound') ||
+    msg.includes('client is offline')
+  );
 };
 
 // Formater un numéro de téléphone en chiffres purs standardisés
@@ -37,6 +56,56 @@ export const cleanPhoneDigits = (phone) => {
 export const phoneToAuthEmail = (phone) => {
   const digits = cleanPhoneDigits(phone);
   return `${digits}@logeetudiant.sn`;
+};
+
+// Vérifier strictement si un numéro de téléphone est déjà associé à un compte Logetu (Optimisé ultra-rapide)
+export const isPhoneAlreadyRegistered = async (phone) => {
+  const cleanPhone = cleanPhoneDigits(phone);
+  if (!cleanPhone || cleanPhone.length < 8) {
+    return { registered: false };
+  }
+
+  // 1. Table prédéfinie (administrateur & bailleurs clés) - Instantané 0ms
+  if (cleanPhone === '763318157' || KNOWN_PHONE_EMAIL_MAP[cleanPhone]) {
+    return { registered: true, phone: cleanPhone };
+  }
+
+  // 2. Vérifier le cache local AsyncStorage - Instantané 1ms
+  try {
+    const cachedEmail = await AsyncStorage.getItem('@phone_to_email_' + cleanPhone);
+    if (cachedEmail) {
+      return { registered: true, phone: cleanPhone };
+    }
+  } catch (e) {}
+
+  // 3. Recherche directe ciblée dans Firestore (limit 1 pour stopper la recherche au premier résultat)
+  try {
+    const qPhone = query(collection(db, "users"), where("telephone", "==", cleanPhone), limit(1));
+    const snap = await getDocs(qPhone);
+    if (!snap.empty) {
+      return { registered: true, phone: cleanPhone, user: snap.docs[0].data() };
+    }
+  } catch (err) {
+    if (isNetworkError(err)) {
+      return { registered: null, networkError: true, error: "Veuillez vérifier votre connexion Internet." };
+    }
+  }
+
+  // 4. Recherche de secours par e-mail technique
+  try {
+    const authEmail = phoneToAuthEmail(cleanPhone);
+    const qEmail = query(collection(db, "users"), where("email", "==", authEmail), limit(1));
+    const snapEmail = await getDocs(qEmail);
+    if (!snapEmail.empty) {
+      return { registered: true, phone: cleanPhone, user: snapEmail.docs[0].data() };
+    }
+  } catch (err) {
+    if (isNetworkError(err)) {
+      return { registered: null, networkError: true, error: "Veuillez vérifier votre connexion Internet." };
+    }
+  }
+
+  return { registered: false, phone: cleanPhone };
 };
 
 // Résoudre un identifiant (Numéro de téléphone ou Email) vers l'adresse e-mail Firebase correspondante
@@ -117,12 +186,33 @@ export const sendPhoneVerificationCode = async (phone, type = 'inscription') => 
     // Ignore permissions error for unauthenticated clients
   }
 
-  return { 
-    success: true, 
-    code: code,
-    cleanPhone: cleanPhone,
-    message: `Votre code de confirmation LogeÉtudiant est : ${code}`
-  };
+  // 3. Envoi effectif du vrai message SMS via la passerelle télécom
+  try {
+    const smsResult = await sendRealSms(cleanPhone, code, type);
+
+    return { 
+      success: true, 
+      code: code,
+      cleanPhone: cleanPhone,
+      delivered: smsResult?.delivered || false,
+      message: `Votre code de confirmation Logetu est : ${code}`
+    };
+  } catch (smsErr) {
+    if (isNetworkError(smsErr)) {
+      return {
+        success: false,
+        errorType: 'NETWORK_ERROR',
+        error: "Veuillez vérifier votre connexion Internet."
+      };
+    }
+    return {
+      success: true,
+      code: code,
+      cleanPhone: cleanPhone,
+      delivered: false,
+      message: `Votre code de confirmation Logetu est : ${code}`
+    };
+  }
 };
 
 // Vérifier la validité du code à 6 chiffres saisi
@@ -168,10 +258,28 @@ export const verifyPhoneCode = async (phone, enteredCode, expectedCode = null) =
 };
 
 // Inscription d'un utilisateur par Numéro de Téléphone (SANS E-MAIL)
+// STRICTEMENT 1 NUMÉRO = 1 SEUL COMPTE
 export const registerUserWithPhone = async (phone, password, userData) => {
   const cleanPhone = cleanPhoneDigits(phone);
   if (!cleanPhone || cleanPhone.length < 8) {
     return { success: false, error: "Numéro de téléphone invalide." };
+  }
+
+  // Vérification stricte préalable : un numéro de téléphone ne peut avoir qu'un seul compte
+  const check = await isPhoneAlreadyRegistered(cleanPhone);
+  if (check.networkError) {
+    return {
+      success: false,
+      errorType: 'NETWORK_ERROR',
+      error: "Veuillez vérifier votre connexion Internet puis réessayer."
+    };
+  }
+  if (check.registered) {
+    return {
+      success: false,
+      errorType: 'PHONE_EXISTS',
+      error: "Ce numéro de téléphone est déjà associé à un compte Logetu. Veuillez vous connecter."
+    };
   }
 
   const authEmail = phoneToAuthEmail(cleanPhone);
@@ -209,129 +317,185 @@ export const registerUserWithPhone = async (phone, password, userData) => {
       message: "Votre compte a été vérifié et créé avec succès !" 
     };
   } catch (error) {
+    if (isNetworkError(error)) {
+      return {
+        success: false,
+        errorType: 'NETWORK_ERROR',
+        error: "Impossible de joindre le serveur. Veuillez vérifier votre connexion Internet."
+      };
+    }
+
     let errorMessage = "Une erreur est survenue lors de l'inscription.";
+    let errorType = 'UNKNOWN';
     if (error.code === 'auth/email-already-in-use') {
-      errorMessage = "Un compte existe déjà avec ce numéro de téléphone. Connectez-vous.";
+      errorType = 'PHONE_EXISTS';
+      errorMessage = "Un compte existe déjà avec ce numéro de téléphone. Veuillez vous connecter.";
     } else if (error.code === 'auth/weak-password') {
       errorMessage = "Le mot de passe doit comporter au moins 6 caractères.";
     }
-    return { success: false, error: errorMessage };
+    return { success: false, errorType, error: errorMessage };
   }
 };
 
-// Connexion de l'utilisateur (SUPPORT INTÉGRAL EMAIL ET NUMÉRO DE TÉLÉPHONE)
+// Connexion ultra-rapide de l'utilisateur (SUPPORT INTÉGRAL EMAIL ET NUMÉRO DE TÉLÉPHONE)
 export const loginUser = async (identifier, password) => {
   try {
     const cleanId = String(identifier || '').trim();
     if (!cleanId || !password) {
-      return { success: false, error: "Veuillez saisir votre email (ou téléphone) et votre mot de passe." };
+      return { success: false, error: "Veuillez saisir votre numéro de téléphone et votre mot de passe." };
     }
 
-    // 1. Résolution de l'adresse e-mail cible
-    const resolvedEmail = await resolveEmailFromPhoneOrEmail(cleanId);
-    
-    // 2. Tentative de connexion directe avec Firebase Auth
+    const cleanDigits = cleanPhoneDigits(cleanId);
+
+    // 1. Détermination instantanée (0ms) de l'adresse e-mail technique Firebase
+    let targetEmail = '';
+    if (cleanId.includes('@')) {
+      targetEmail = cleanId.toLowerCase();
+    } else if (cleanDigits && KNOWN_PHONE_EMAIL_MAP[cleanDigits]) {
+      targetEmail = KNOWN_PHONE_EMAIL_MAP[cleanDigits];
+    } else if (cleanDigits) {
+      targetEmail = phoneToAuthEmail(cleanDigits);
+    } else {
+      targetEmail = cleanId;
+    }
+
+    // 2. Connexion DIRECTE à Firebase Auth sans requêtes bloquantes préalables
     let userCredential;
     try {
-      userCredential = await signInWithEmailAndPassword(auth, resolvedEmail.trim(), password);
+      userCredential = await signInWithEmailAndPassword(auth, targetEmail, password);
     } catch (primaryErr) {
-      // Passerelle spéciale pour l'administrateur aeers1997@gmail.com
-      if (cleanId.toLowerCase() === 'aeers1997@gmail.com') {
+      if (isNetworkError(primaryErr)) {
+        return {
+          success: false,
+          errorType: 'NETWORK_ERROR',
+          error: "Veuillez vérifier votre connexion Internet puis réessayer."
+        };
+      }
+
+      // Secours pour l'administrateur
+      if (cleanId.toLowerCase() === 'aeers1997@gmail.com' || cleanDigits === '763318157') {
         try {
           userCredential = await signInWithEmailAndPassword(auth, '763318157@logeetudiant.sn', password);
-        } catch (adminErr) {
-          throw primaryErr;
-        }
+        } catch (adminErr) {}
       }
-      // Si la connexion avec l'e-mail résolu échoue et que l'utilisateur a tapé un téléphone pur
-      else if (!cleanId.includes('@')) {
-        const directPhoneEmail = phoneToAuthEmail(cleanId);
-        if (directPhoneEmail !== resolvedEmail) {
-          try {
-            userCredential = await signInWithEmailAndPassword(auth, directPhoneEmail, password);
-          } catch (secondaryErr) {
-            throw primaryErr;
-          }
-        } else {
-          throw primaryErr;
+
+      // Si la connexion a échoué : analyse rapide et précise
+      if (!userCredential) {
+        if (primaryErr.code === 'auth/wrong-password') {
+          return {
+            success: false,
+            errorType: 'WRONG_PASSWORD',
+            error: "Mot de passe incorrect. Veuillez vérifier les 6 chiffres saisis."
+          };
         }
-      } else {
-        throw primaryErr;
+
+        if (primaryErr.code === 'auth/user-not-found') {
+          return {
+            success: false,
+            errorType: 'NO_ACCOUNT',
+            error: "Aucun compte n'est associé à ce numéro de téléphone. Veuillez d'abord vous inscrire."
+          };
+        }
+
+        if (primaryErr.code === 'auth/too-many-requests') {
+          return {
+            success: false,
+            errorType: 'TOO_MANY_REQUESTS',
+            error: "Trop de tentatives échouées. Veuillez patienter un instant."
+          };
+        }
+
+        // Pour auth/invalid-credential : vérifier rapidement si le numéro est inscrit
+        if (!cleanId.includes('@') && cleanDigits) {
+          const check = await isPhoneAlreadyRegistered(cleanDigits);
+          if (check.networkError) {
+            return {
+              success: false,
+              errorType: 'NETWORK_ERROR',
+              error: "Veuillez vérifier votre connexion Internet puis réessayer."
+            };
+          }
+          if (!check.registered) {
+            return {
+              success: false,
+              errorType: 'NO_ACCOUNT',
+              error: "Aucun compte n'est associé à ce numéro de téléphone. Veuillez d'abord vous inscrire."
+            };
+          } else {
+            return {
+              success: false,
+              errorType: 'WRONG_PASSWORD',
+              error: "Mot de passe incorrect. Le mot de passe à 6 chiffres est erroné."
+            };
+          }
+        }
+
+        return {
+          success: false,
+          error: "Numéro de téléphone ou mot de passe incorrect."
+        };
       }
     }
 
     const user = userCredential.user;
 
-    // 3. Mémoriser la correspondance dans le cache local
-    if (!cleanId.includes('@')) {
-      const pDigits = cleanPhoneDigits(cleanId);
-      AsyncStorage.setItem('@phone_to_email_' + pDigits, user.email || resolvedEmail).catch(() => {});
+    // 3. Récupération PARALLÈLE (Promise.all) ultra-rapide du profil utilisateur
+    const [userDocSnap, bannedDocSnap] = await Promise.all([
+      getDoc(doc(db, "users", user.uid)).catch(() => null),
+      getDoc(doc(db, "banned_users", user.uid)).catch(() => null)
+    ]);
+
+    if (bannedDocSnap && bannedDocSnap.exists()) {
+      await signOut(auth);
+      return {
+        success: false,
+        error: "Ce compte a été définitivement supprimé par l'administrateur. Accès refusé."
+      };
     }
 
-    // 4. Vérifier si le compte est banni par l'administrateur
-    try {
-      const bannedDoc = await getDoc(doc(db, "banned_users", user.uid));
-      if (bannedDoc.exists()) {
+    let userInfo = { role: 'etudiant' };
+    if (userDocSnap && userDocSnap.exists()) {
+      userInfo = userDocSnap.data();
+      if (userInfo.isDeleted || userInfo.statut === 'supprime') {
         await signOut(auth);
         return {
           success: false,
-          error: "Ce compte a été définitivement supprimé par l'administrateur. Accès refusé."
+          error: "Ce compte a été supprimé par l'administrateur. Accès refusé."
         };
       }
-    } catch (e) {}
+    }
 
-    // 5. Charger le profil Firestore pour récupérer le rôle
-    let userInfo = { role: 'etudiant' };
-    try {
-      const userDoc = await getDoc(doc(db, "users", user.uid));
-      if (userDoc.exists()) {
-        userInfo = userDoc.data();
-        if (userInfo.isDeleted || userInfo.statut === 'supprime') {
-          await signOut(auth);
-          return {
-            success: false,
-            error: "Ce compte a été supprimé par l'administrateur. Accès refusé."
-          };
-        }
-        if (userInfo.telephone) {
-          const pDigits = cleanPhoneDigits(userInfo.telephone);
-          AsyncStorage.setItem('@phone_to_email_' + pDigits, user.email || resolvedEmail).catch(() => {});
-        }
-      }
-    } catch (e) {}
-
-    // Détection stricte et absolue de l'administrateur
-    const cleanDigits = cleanPhoneDigits(cleanId);
+    // Détection immédiate du rôle administrateur
     if (
       cleanDigits === '763318157' ||
       cleanId.toLowerCase() === 'aeers1997@gmail.com' ||
-      resolvedEmail === 'aeers1997@gmail.com' ||
-      resolvedEmail === '763318157@logeetudiant.sn' ||
-      resolvedEmail === 'capico767@gmail.com' ||
-      resolvedEmail === 'capico115@gmail.com' ||
-      resolvedEmail.includes('admin') ||
-      userInfo.role === 'admin' ||
-      userInfo.email === 'aeers1997@gmail.com' ||
-      userInfo.adminEmail === 'aeers1997@gmail.com'
+      targetEmail === 'aeers1997@gmail.com' ||
+      targetEmail === '763318157@logeetudiant.sn' ||
+      userInfo.role === 'admin'
     ) {
       userInfo.role = 'admin';
       userInfo.fonction = 'Super-Administrateur';
-      userInfo.email = 'aeers1997@gmail.com';
-      userInfo.adminEmail = 'aeers1997@gmail.com';
     }
 
-    // Mémoriser la clé pour faciliter les futures réinitialisations transparentes par téléphone
+    // Sauvegarder en arrière-plan sans bloquer
+    if (cleanDigits) {
+      AsyncStorage.setItem('@phone_to_email_' + cleanDigits, user.email || targetEmail).catch(() => {});
+    }
     updateDoc(doc(db, "users", user.uid), { authKey: password }).catch(() => {});
 
     return { success: true, user, userInfo };
   } catch (error) {
-    let errorMessage = "Identifiant ou mot de passe incorrect.";
-    if (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential') {
-      errorMessage = "Identifiant (email ou téléphone) ou mot de passe incorrect.";
-    } else if (error.code === 'auth/too-many-requests') {
-      errorMessage = "Trop de tentatives échouées. Veuillez patienter un instant.";
+    if (isNetworkError(error)) {
+      return {
+        success: false,
+        errorType: 'NETWORK_ERROR',
+        error: "Veuillez vérifier votre connexion Internet puis réessayer."
+      };
     }
-    return { success: false, error: errorMessage };
+    return {
+      success: false,
+      error: error.message || "Une erreur est survenue lors de la connexion."
+    };
   }
 };
 
@@ -377,6 +541,12 @@ export const resetPasswordWithPhone = async (identifier, newPassword) => {
         authKey: cleanPass,
         updatedAt: new Date()
       });
+    } else {
+      return {
+        success: false,
+        errorType: 'NO_ACCOUNT',
+        error: "Aucun compte n'est associé à ce numéro de téléphone. Veuillez d'abord vous inscrire."
+      };
     }
 
     return { 
@@ -384,6 +554,13 @@ export const resetPasswordWithPhone = async (identifier, newPassword) => {
       message: "Votre mot de passe a été modifié avec succès ! Vous pouvez vous connecter." 
     };
   } catch (error) {
+    if (isNetworkError(error)) {
+      return {
+        success: false,
+        errorType: 'NETWORK_ERROR',
+        error: "Veuillez vérifier votre connexion Internet."
+      };
+    }
     return { 
       success: true, 
       message: "Votre mot de passe a été mis à jour avec succès !" 

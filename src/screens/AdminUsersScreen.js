@@ -9,14 +9,17 @@ import {
   ActivityIndicator,
   TextInput,
   Modal,
-  ScrollView 
+  ScrollView,
+  SafeAreaView,
+  Platform,
+  StatusBar
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { db } from '../config/firebase';
 import { collection, getDocs, deleteDoc, doc, updateDoc, setDoc } from 'firebase/firestore';
 import { formatCleanFullName } from '../utils/nameFormatter';
 
-export default function AdminUsersScreen() {
+export default function AdminUsersScreen({ navigation }) {
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
@@ -207,15 +210,28 @@ export default function AdminUsersScreen() {
   if (loading) {
     return (
       <View style={styles.center}>
-        <ActivityIndicator size="large" color="#1E40AF" />
+        <ActivityIndicator size="large" color="#003880" />
         <Text style={styles.loadingText}>Chargement des comptes utilisateurs...</Text>
       </View>
     );
   }
 
   return (
-    <View style={styles.container}>
-      {/* BARRE DE RECHERCHE */}
+    <SafeAreaView style={styles.safeArea}>
+      {/* NAVBAR ADMINISTRATIVE FIXE */}
+      <View style={styles.fixedNavbar}>
+        <TouchableOpacity style={styles.backBtn} onPress={() => navigation?.goBack()} activeOpacity={0.8}>
+          <Ionicons name="arrow-back" size={20} color="#003880" />
+          <Text style={styles.backBtnText}>Admin</Text>
+        </TouchableOpacity>
+        <Text style={styles.navbarTitle}>Gestion Utilisateurs ({filteredUsers.length})</Text>
+        <TouchableOpacity style={styles.refreshIconBtn} onPress={fetchUsers} activeOpacity={0.8}>
+          <Ionicons name="refresh" size={18} color="#003880" />
+        </TouchableOpacity>
+      </View>
+
+      <View style={styles.container}>
+        {/* BARRE DE RECHERCHE */}
       <View style={styles.searchBar}>
         <Ionicons name="search" size={18} color="#A0AEC0" style={{ marginRight: 8 }} />
         <TextInput
@@ -326,7 +342,7 @@ export default function AdminUsersScreen() {
                   onPress={() => handleOpenEdit(item)}
                   activeOpacity={0.7}
                 >
-                  <Ionicons name="pencil" size={16} color="#3182CE" />
+                  <Ionicons name="pencil" size={16} color="#003880" />
                 </TouchableOpacity>
 
                 {/* Bouton Supprimer l'utilisateur */}
@@ -414,14 +430,60 @@ export default function AdminUsersScreen() {
           </View>
         </View>
       </Modal>
-    </View>
+      </View>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
+  safeArea: {
+    flex: 1,
+    backgroundColor: '#FFFFFF',
+    paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight : 0,
+  },
   container: { flex: 1, padding: 15, backgroundColor: '#F7FAFC' },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#F7FAFC' },
   loadingText: { marginTop: 12, fontSize: 14, color: '#718096', fontWeight: '500' },
+
+  // NAVBAR FIXE
+  fixedNavbar: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E2E8F0',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 3,
+    elevation: 3,
+    zIndex: 10,
+  },
+  backBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 4,
+    paddingRight: 8,
+  },
+  backBtnText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#003880',
+    marginLeft: 4,
+  },
+  navbarTitle: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: '#0F172A',
+  },
+  refreshIconBtn: {
+    padding: 6,
+    backgroundColor: '#EFF6FF',
+    borderRadius: 8,
+  },
 
   // SEARCH
   searchBar: {
@@ -462,8 +524,8 @@ const styles = StyleSheet.create({
     marginRight: 6,
   },
   filterChipActive: {
-    backgroundColor: '#1E40AF',
-    borderColor: '#1E40AF',
+    backgroundColor: '#003880',
+    borderColor: '#003880',
   },
   filterChipText: {
     fontSize: 11,
@@ -569,9 +631,9 @@ const styles = StyleSheet.create({
   modalInput: { backgroundColor: '#F7FAFC', borderWidth: 1, borderColor: '#CBD5E0', padding: 10, borderRadius: 8, fontSize: 14, color: '#2D3748' },
   modalRoleRow: { flexDirection: 'row', gap: 8, marginTop: 4, marginBottom: 16 },
   modalRoleChip: { flex: 1, paddingVertical: 8, alignItems: 'center', backgroundColor: '#EDF2F7', borderRadius: 8, borderWidth: 1, borderColor: '#CBD5E0' },
-  modalRoleChipActive: { backgroundColor: '#1E40AF', borderColor: '#1E40AF' },
+  modalRoleChipActive: { backgroundColor: '#003880', borderColor: '#003880' },
   modalRoleChipText: { fontSize: 12, fontWeight: '600', color: '#4A5568' },
   modalRoleChipTextActive: { color: '#fff', fontWeight: 'bold' },
-  modalSaveBtn: { backgroundColor: '#1E40AF', padding: 13, borderRadius: 10, alignItems: 'center', marginTop: 8 },
+  modalSaveBtn: { backgroundColor: '#003880', padding: 13, borderRadius: 10, alignItems: 'center', marginTop: 8 },
   modalSaveBtnText: { color: '#fff', fontWeight: 'bold', fontSize: 14 },
 });

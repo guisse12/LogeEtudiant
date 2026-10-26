@@ -6,18 +6,18 @@ import LoginScreen from './src/screens/LoginScreen';
 import RegisterScreen from './src/screens/RegisterScreen';
 import BailleurHomeScreen from './src/screens/BailleurHomeScreen';
 import EtudiantHomeScreen from './src/screens/EtudiantHomeScreen';
-import AdminHomeScreen from './src/screens/AdminHomeScreen'; // <-- Écran du tableau de bord Administrateur
-import AdminPropertiesScreen from './src/screens/AdminPropertiesScreen'; // <-- Écran de modération des annonces
-import AdminUsersScreen from './src/screens/AdminUsersScreen'; // <-- Écran de gestion des utilisateurs
-import AdminVerifyBailleursScreen from './src/screens/AdminVerifyBailleursScreen'; // <-- Écran de validation des bailleurs
-import AdminReportsScreen from './src/screens/AdminReportsScreen'; // <-- Écran de suivi des arnaques signalées
+import AdminHomeScreen from './src/screens/AdminHomeScreen';
+import AdminPropertiesScreen from './src/screens/AdminPropertiesScreen';
+import AdminUsersScreen from './src/screens/AdminUsersScreen';
+import AdminVerifyBailleursScreen from './src/screens/AdminVerifyBailleursScreen';
+import AdminReportsScreen from './src/screens/AdminReportsScreen';
 import PropertyDetailsScreen from './src/screens/PropertyDetailsScreen';
 import ProfileScreen from './src/screens/ProfileScreen';
-import ConversationsScreen from './src/screens/ConversationsScreen'; // <-- Écran de liste des messages
-import ChatScreen from './src/screens/ChatScreen'; // <-- Écran de discussion en direct
-import ColocatairesScreen from './src/screens/ColocatairesScreen'; // <-- Écran de recherche de colocataires
-import AjouterColocAnnonceScreen from './src/screens/AjouterColocAnnonceScreen'; // <-- Écran de publication d'annonce
-import FavorisScreen from './src/screens/FavorisScreen'; // <-- Écran des logements favoris
+import ConversationsScreen from './src/screens/ConversationsScreen';
+import ChatScreen from './src/screens/ChatScreen';
+import ColocatairesScreen from './src/screens/ColocatairesScreen';
+import AjouterColocAnnonceScreen from './src/screens/AjouterColocAnnonceScreen';
+import FavorisScreen from './src/screens/FavorisScreen';
 
 const Stack = createNativeStackNavigator();
 
@@ -30,27 +30,27 @@ export default function App() {
         <Stack.Screen name="EtudiantHome" component={EtudiantHomeScreen} />
         <Stack.Screen name="BailleurHome" component={BailleurHomeScreen} />
         
-        {/* Écrans Administrateur */}
+        {/* Écrans Administrateur - En-tête natif masqué pour conserver la navbar unique de l'écran */}
         <Stack.Screen name="AdminHome" component={AdminHomeScreen} />
         <Stack.Screen 
           name="AdminProperties" 
           component={AdminPropertiesScreen} 
-          options={{ headerShown: true, title: "Modération des annonces" }} 
+          options={{ headerShown: false }} 
         />
         <Stack.Screen 
           name="AdminUsers" 
           component={AdminUsersScreen} 
-          options={{ headerShown: true, title: "Gestion des utilisateurs" }} 
+          options={{ headerShown: false }} 
         />
         <Stack.Screen 
           name="AdminVerifyBailleurs" 
           component={AdminVerifyBailleursScreen} 
-          options={{ headerShown: true, title: "Validation des Bailleurs" }} 
+          options={{ headerShown: false }} 
         />
         <Stack.Screen 
           name="AdminReports" 
           component={AdminReportsScreen} 
-          options={{ headerShown: true, title: "Signalements d'arnaques" }} 
+          options={{ headerShown: false }} 
         />
 
         <Stack.Screen name="PropertyDetails" component={PropertyDetailsScreen} />

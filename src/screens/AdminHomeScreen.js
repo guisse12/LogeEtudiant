@@ -11,7 +11,8 @@ import {
   Dimensions,
   SafeAreaView,
   StatusBar,
-  Platform
+  Platform,
+  Image
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { WebView } from 'react-native-webview';
@@ -305,7 +306,7 @@ export default function AdminHomeScreen({ navigation }) {
   if (loading) {
     return (
       <View style={styles.loaderContainer}>
-        <ActivityIndicator size="large" color="#1E40AF" />
+        <ActivityIndicator size="large" color="#003880" />
         <Text style={styles.loaderText}>Chargement du tableau de bord administrateur...</Text>
       </View>
     );
@@ -328,13 +329,16 @@ export default function AdminHomeScreen({ navigation }) {
       <View style={styles.fixedNavbar}>
         <View style={styles.headerTitleCol}>
           <View style={styles.brandRow}>
-            <View style={styles.shieldIconWrapper}>
-              <Ionicons name="shield-checkmark" size={13} color="#FFFFFF" />
+            <Image 
+              source={require('../../assets/logo.png')} 
+              style={styles.adminLogo} 
+              resizeMode="contain" 
+            />
+            <View>
+              <Text style={styles.badgeSystem}>Administration Centrale</Text>
+              <Text style={styles.title}>Logetu Admin</Text>
             </View>
-            <Text style={styles.badgeSystem}>Administration Centrale</Text>
           </View>
-          <Text style={styles.title}>Espace Administrateur</Text>
-          <Text style={styles.subtitle} numberOfLines={1}>Supervision, Sécurité & Modération en temps réel</Text>
         </View>
 
         <View style={styles.headerActions}>
@@ -343,11 +347,11 @@ export default function AdminHomeScreen({ navigation }) {
             onPress={() => navigation.navigate('Profile')}
             activeOpacity={0.8}
           >
-            <Ionicons name="person-circle-outline" size={18} color="#1E40AF" style={{ marginRight: 4 }} />
+            <Ionicons name="person-circle-outline" size={18} color="#003880" style={{ marginRight: 4 }} />
             <Text style={styles.profileBtnText}>Profil</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.refreshBtn} onPress={onRefresh} activeOpacity={0.8}>
-            <Ionicons name="refresh" size={18} color="#1E40AF" />
+            <Ionicons name="refresh" size={18} color="#003880" />
           </TouchableOpacity>
           <TouchableOpacity style={styles.logoutButton} onPress={handleLogout} activeOpacity={0.8}>
             <Ionicons name="log-out-outline" size={20} color="#E53E3E" />
@@ -359,7 +363,7 @@ export default function AdminHomeScreen({ navigation }) {
       <ScrollView 
         contentContainerStyle={styles.container}
         showsVerticalScrollIndicator={false}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={['#1E40AF']} />}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={['#003880']} />}
       >
         {/* BANNIÈRE STATUT DU SYSTÈME */}
         <View style={styles.statusBanner}>
@@ -376,11 +380,11 @@ export default function AdminHomeScreen({ navigation }) {
         {/* KPI 1 : Utilisateurs */}
         <View style={styles.kpiCard}>
           <View style={styles.kpiTopRow}>
-            <View style={[styles.kpiIconBox, { backgroundColor: '#EBF8FF' }]}>
-              <Ionicons name="people" size={22} color="#3182CE" />
+            <View style={[styles.kpiIconBox, { backgroundColor: '#EFF6FF' }]}>
+              <Ionicons name="people" size={22} color="#003880" />
             </View>
-            <View style={styles.kpiPill}>
-              <Text style={styles.kpiPillText}>Total</Text>
+            <View style={[styles.kpiPill, { backgroundColor: '#EFF6FF' }]}>
+              <Text style={[styles.kpiPillText, { color: '#003880' }]}>Total</Text>
             </View>
           </View>
           <Text style={styles.kpiValue}>{stats.usersCount}</Text>
@@ -393,11 +397,11 @@ export default function AdminHomeScreen({ navigation }) {
         {/* KPI 2 : Logements */}
         <View style={styles.kpiCard}>
           <View style={styles.kpiTopRow}>
-            <View style={[styles.kpiIconBox, { backgroundColor: '#F0FFF4' }]}>
-              <Ionicons name="home" size={22} color="#38A169" />
+            <View style={[styles.kpiIconBox, { backgroundColor: '#EFF6FF' }]}>
+              <Ionicons name="home" size={22} color="#003880" />
             </View>
-            <View style={[styles.kpiPill, { backgroundColor: '#F0FFF4' }]}>
-              <Text style={[styles.kpiPillText, { color: '#38A169' }]}>Actifs</Text>
+            <View style={[styles.kpiPill, { backgroundColor: '#EFF6FF' }]}>
+              <Text style={[styles.kpiPillText, { color: '#003880' }]}>Actifs</Text>
             </View>
           </View>
           <Text style={styles.kpiValue}>{stats.propertiesCount}</Text>
@@ -410,20 +414,20 @@ export default function AdminHomeScreen({ navigation }) {
         {/* KPI 3 : Bailleurs en attente */}
         <View style={styles.kpiCard}>
           <View style={styles.kpiTopRow}>
-            <View style={[styles.kpiIconBox, { backgroundColor: stats.bailleursEnAttente > 0 ? '#FEFCBF' : '#EDF2F7' }]}>
+            <View style={[styles.kpiIconBox, { backgroundColor: stats.bailleursEnAttente > 0 ? '#FEF3C7' : '#EFF6FF' }]}>
               <Ionicons 
                 name="checkmark-done-circle" 
                 size={22} 
-                color={stats.bailleursEnAttente > 0 ? '#D69E2E' : '#718096'} 
+                color={stats.bailleursEnAttente > 0 ? '#E8A008' : '#003880'} 
               />
             </View>
             {stats.bailleursEnAttente > 0 ? (
-              <View style={[styles.kpiPill, { backgroundColor: '#FEEBC8' }]}>
-                <Text style={[styles.kpiPillText, { color: '#C05621' }]}>Action</Text>
+              <View style={[styles.kpiPill, { backgroundColor: '#FEF3C7' }]}>
+                <Text style={[styles.kpiPillText, { color: '#B45309' }]}>Action</Text>
               </View>
             ) : (
-              <View style={[styles.kpiPill, { backgroundColor: '#EDF2F7' }]}>
-                <Text style={[styles.kpiPillText, { color: '#718096' }]}>À jour</Text>
+              <View style={[styles.kpiPill, { backgroundColor: '#EFF6FF' }]}>
+                <Text style={[styles.kpiPillText, { color: '#003880' }]}>À jour</Text>
               </View>
             )}
           </View>
@@ -525,7 +529,7 @@ export default function AdminHomeScreen({ navigation }) {
       <View style={styles.sectionCard}>
         <View style={styles.sectionHeaderRow}>
           <Ionicons name="pie-chart" size={18} color="#2B6CB0" style={{ marginRight: 6 }} />
-          <Text style={styles.sectionCardTitle}>Répartition par Campus Universitaire</Text>
+          <Text style={styles.sectionCardTitle}>Répartition des logements par campus</Text>
         </View>
 
         {stats.campusDistribution.length === 0 ? (
@@ -561,14 +565,14 @@ export default function AdminHomeScreen({ navigation }) {
         onPress={() => navigation.navigate("AdminProperties")}
         activeOpacity={0.8}
       >
-        <View style={[styles.actionIconWrapper, { backgroundColor: '#EBF8FF' }]}>
-          <Ionicons name="shield-checkmark" size={24} color="#3182CE" />
+        <View style={[styles.actionIconWrapper, { backgroundColor: '#EFF6FF' }]}>
+          <Ionicons name="shield-checkmark" size={24} color="#003880" />
         </View>
         <View style={styles.actionTextContainer}>
           <View style={styles.actionTitleRow}>
             <Text style={styles.actionTitle}>Modérer les annonces</Text>
-            <View style={styles.actionPill}>
-              <Text style={styles.actionPillText}>{stats.propertiesCount} annonces</Text>
+            <View style={[styles.actionPill, { backgroundColor: '#EFF6FF' }]}>
+              <Text style={[styles.actionPillText, { color: '#003880' }]}>{stats.propertiesCount} annonces</Text>
             </View>
           </View>
           <Text style={styles.actionDescription}>
@@ -584,14 +588,14 @@ export default function AdminHomeScreen({ navigation }) {
         onPress={() => navigation.navigate("AdminUsers")}
         activeOpacity={0.8}
       >
-        <View style={[styles.actionIconWrapper, { backgroundColor: '#F0FFF4' }]}>
-          <Ionicons name="people" size={24} color="#38A169" />
+        <View style={[styles.actionIconWrapper, { backgroundColor: '#EFF6FF' }]}>
+          <Ionicons name="people" size={24} color="#003880" />
         </View>
         <View style={styles.actionTextContainer}>
           <View style={styles.actionTitleRow}>
             <Text style={styles.actionTitle}>Gérer les utilisateurs</Text>
-            <View style={[styles.actionPill, { backgroundColor: '#F0FFF4' }]}>
-              <Text style={[styles.actionPillText, { color: '#38A169' }]}>{stats.usersCount} inscrits</Text>
+            <View style={[styles.actionPill, { backgroundColor: '#EFF6FF' }]}>
+              <Text style={[styles.actionPillText, { color: '#003880' }]}>{stats.usersCount} inscrits</Text>
             </View>
           </View>
           <Text style={styles.actionDescription}>
@@ -607,25 +611,25 @@ export default function AdminHomeScreen({ navigation }) {
         onPress={() => navigation.navigate("AdminVerifyBailleurs")}
         activeOpacity={0.8}
       >
-        <View style={[styles.actionIconWrapper, { backgroundColor: stats.bailleursEnAttente > 0 ? '#FEFCBF' : '#EDF2F7' }]}>
+        <View style={[styles.actionIconWrapper, { backgroundColor: stats.bailleursEnAttente > 0 ? '#FEF3C7' : '#EFF6FF' }]}>
           <Ionicons 
             name="checkmark-done-circle" 
             size={24} 
-            color={stats.bailleursEnAttente > 0 ? "#D69E2E" : "#718096"} 
+            color={stats.bailleursEnAttente > 0 ? "#E8A008" : "#003880"} 
           />
         </View>
         <View style={styles.actionTextContainer}>
           <View style={styles.actionTitleRow}>
             <Text style={styles.actionTitle}>Vérifier les bailleurs</Text>
             {stats.bailleursEnAttente > 0 ? (
-              <View style={[styles.actionPill, { backgroundColor: '#FEEBC8' }]}>
-                <Text style={[styles.actionPillText, { color: '#C05621', fontWeight: 'bold' }]}>
+              <View style={[styles.actionPill, { backgroundColor: '#FEF3C7' }]}>
+                <Text style={[styles.actionPillText, { color: '#B45309', fontWeight: 'bold' }]}>
                   ⚡ {stats.bailleursEnAttente} en attente
                 </Text>
               </View>
             ) : (
-              <View style={[styles.actionPill, { backgroundColor: '#EDF2F7' }]}>
-                <Text style={[styles.actionPillText, { color: '#718096' }]}>À jour</Text>
+              <View style={[styles.actionPill, { backgroundColor: '#EFF6FF' }]}>
+                <Text style={[styles.actionPillText, { color: '#003880' }]}>À jour</Text>
               </View>
             )}
           </View>
@@ -677,14 +681,14 @@ export default function AdminHomeScreen({ navigation }) {
         onPress={() => navigation.navigate("Profile")}
         activeOpacity={0.8}
       >
-        <View style={[styles.actionIconWrapper, { backgroundColor: '#EBF8FF' }]}>
-          <Ionicons name="person" size={24} color="#3182CE" />
+        <View style={[styles.actionIconWrapper, { backgroundColor: '#EFF6FF' }]}>
+          <Ionicons name="person" size={24} color="#003880" />
         </View>
         <View style={styles.actionTextContainer}>
           <View style={styles.actionTitleRow}>
             <Text style={styles.actionTitle}>Mon Profil Administrateur</Text>
-            <View style={[styles.actionPill, { backgroundColor: '#EBF8FF' }]}>
-              <Text style={styles.actionPillText}>⚙️ Paramètres</Text>
+            <View style={[styles.actionPill, { backgroundColor: '#EFF6FF' }]}>
+              <Text style={[styles.actionPillText, { color: '#003880' }]}>⚙️ Paramètres</Text>
             </View>
           </View>
           <Text style={styles.actionDescription}>
@@ -698,11 +702,39 @@ export default function AdminHomeScreen({ navigation }) {
       <View style={styles.footerAudit}>
         <Ionicons name="lock-closed" size={14} color="#718096" style={{ marginRight: 6 }} />
         <Text style={styles.footerAuditText}>
-          Plateforme sécurisée LogeÉtudiant • Version 1.0.0 Pro
+          Plateforme sécurisée Logetu • Version 1.0.0 Pro
         </Text>
       </View>
 
     </ScrollView>
+
+      {/* 3. NAVBAR FIXE ADMIN DU BAS */}
+      <View style={styles.adminBottomBar}>
+        <TouchableOpacity style={styles.adminBottomTab} onPress={() => {}} activeOpacity={0.8}>
+          <Ionicons name="stats-chart" size={20} color="#003880" />
+          <Text style={[styles.adminBottomTabText, { color: '#003880', fontWeight: 'bold' }]}>Dashboard</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity style={styles.adminBottomTab} onPress={() => navigation.navigate('AdminUsers')} activeOpacity={0.8}>
+          <Ionicons name="people-outline" size={20} color="#64748B" />
+          <Text style={styles.adminBottomTabText}>Utilisateurs</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity style={styles.adminBottomTab} onPress={() => navigation.navigate('AdminProperties')} activeOpacity={0.8}>
+          <Ionicons name="home-outline" size={20} color="#64748B" />
+          <Text style={styles.adminBottomTabText}>Annonces</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity style={styles.adminBottomTab} onPress={() => navigation.navigate('AdminVerifyBailleurs')} activeOpacity={0.8}>
+          <Ionicons name="shield-checkmark-outline" size={20} color="#64748B" />
+          <Text style={styles.adminBottomTabText}>Bailleurs</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity style={styles.adminBottomTab} onPress={() => navigation.navigate('Profile')} activeOpacity={0.8}>
+          <Ionicons name="person-outline" size={20} color="#64748B" />
+          <Text style={styles.adminBottomTabText}>Profil</Text>
+        </TouchableOpacity>
+      </View>
     </SafeAreaView>
   );
 }
@@ -739,7 +771,45 @@ const styles = StyleSheet.create({
     paddingTop: 14,
     backgroundColor: '#F7FAFC',
     flexGrow: 1,
-    paddingBottom: 40,
+    paddingBottom: 85,
+  },
+  adminLogo: {
+    width: 36,
+    height: 36,
+    borderRadius: 8,
+    marginRight: 10,
+  },
+  adminBottomBar: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    borderTopWidth: 1,
+    borderTopColor: '#E2E8F0',
+    paddingTop: 8,
+    paddingBottom: Platform.OS === 'ios' ? 22 : 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -3 },
+    shadowOpacity: 0.08,
+    shadowRadius: 6,
+    elevation: 10,
+    zIndex: 100,
+  },
+  adminBottomTab: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 2,
+    flex: 1,
+  },
+  adminBottomTabText: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: '#64748B',
+    marginTop: 2,
   },
   loaderContainer: {
     flex: 1,
@@ -761,7 +831,7 @@ const styles = StyleSheet.create({
     marginBottom: 2,
   },
   shieldIconWrapper: {
-    backgroundColor: '#1E40AF',
+    backgroundColor: '#003880',
     width: 18,
     height: 18,
     borderRadius: 9,
@@ -772,7 +842,7 @@ const styles = StyleSheet.create({
   badgeSystem: {
     fontSize: 10,
     fontWeight: '700',
-    color: '#1E40AF',
+    color: '#003880',
     textTransform: 'uppercase',
     letterSpacing: 0.5,
   },
@@ -805,7 +875,7 @@ const styles = StyleSheet.create({
   profileBtnText: {
     fontSize: 12,
     fontWeight: 'bold',
-    color: '#1E40AF',
+    color: '#003880',
   },
   refreshBtn: {
     padding: 8,
