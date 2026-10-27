@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Logetu — Logement Étudiant & Colocation au Sénégal</title>
+  <meta name="description" content="Logetu est l'application mobile de référence pour trouver un logement étudiant vérifié ou une colocation près des universités au Sénégal.">
+  <link rel="icon" type="image/png" href="https://raw.githubusercontent.com/guisse12/LogeEtudiant/main/assets/logo.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --primary: #003880;
+      --secondary: #E8A008;
+      --dark: #0F172A;
+      --light: #F8FAFC;
+      --gray: #64748B;
+      --white: #FFFFFF;
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: 'Plus Jakarta Sans', sans-serif;
+      background-color: var(--light);
+      color: var(--dark);
+      line-height: 1.6;
+    }
+    header {
+      background: var(--white);
+      border-bottom: 1px solid #E2E8F0;
+      padding: 16px 24px;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+    .nav-container {
+      max-width: 1100px;
+      margin: 0 auto;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      text-decoration: none;
+    }
+    .brand-logo {
+      width: 44px;
+      height: 44px;
+      border-radius: 10px;
+    }
+    .brand-name {
+      font-size: 22px;
+      font-weight: 800;
+      color: var(--primary);
+      letter-spacing: -0.5px;
+    }
+    .brand-tagline {
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--secondary);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .nav-btn {
+      background: var(--primary);
+      color: var(--white);
+      padding: 10px 20px;
+      border-radius: 8px;
+      text-decoration: none;
+      font-weight: 700;
+      font-size: 14px;
+      transition: opacity 0.2s;
+    }
+    .nav-btn:hover { opacity: 0.9; }
+
+    /* HERO */
+    .hero {
+      padding: 70px 20px 50px;
+      text-align: center;
+      background: linear-gradient(180deg, #FFFFFF 0%, #EFF6FF 100%);
+    }
+    .hero-content {
+      max-width: 800px;
+      margin: 0 auto;
+    }
+    .badge {
+      display: inline-block;
+      background: #FEF3C7;
+      color: #92400E;
+      padding: 6px 14px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 700;
+      margin-bottom: 20px;
+    }
+    .hero h1 {
+      font-size: 40px;
+      font-weight: 800;
+      color: var(--primary);
+      line-height: 1.2;
+      margin-bottom: 16px;
+    }
+    .hero p {
+      font-size: 17px;
+      color: var(--gray);
+      margin-bottom: 30px;
+    }
+    .hero-buttons {
+      display: flex;
+      justify-content: center;
+      gap: 14px;
+      flex-wrap: wrap;
+    }
+    .btn-main {
+      background: var(--secondary);
+      color: var(--white);
+      padding: 14px 28px;
+      border-radius: 10px;
+      text-decoration: none;
+      font-weight: 700;
+      font-size: 15px;
+    }
+    .btn-outline {
+      background: var(--white);
+      color: var(--primary);
+      border: 1px solid #CBD5E1;
+      padding: 14px 28px;
+      border-radius: 10px;
+      text-decoration: none;
+      font-weight: 700;
+      font-size: 15px;
+    }
+
+    /* FEATURES */
+    .features {
+      padding: 60px 20px;
+      max-width: 1100px;
+      margin: 0 auto;
+    }
+    .section-title {
+      text-align: center;
+      font-size: 26px;
+      font-weight: 800;
+      color: var(--dark);
+      margin-bottom: 40px;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 24px;
+    }
+    .card {
+      background: var(--white);
+      padding: 28px;
+      border-radius: 14px;
+      border: 1px solid #E2E8F0;
+    }
+    .card-icon {
+      font-size: 32px;
+      margin-bottom: 14px;
+    }
+    .card h3 {
+      font-size: 18px;
+      font-weight: 700;
+      color: var(--primary);
+      margin-bottom: 10px;
+    }
+    .card p {
+      font-size: 14px;
+      color: var(--gray);
+      line-height: 1.6;
+    }
+
+    /* UNIVERSITIES COVERAGE */
+    .coverage {
+      background: var(--white);
+      padding: 60px 20px;
+      border-top: 1px solid #E2E8F0;
+      border-bottom: 1px solid #E2E8F0;
+    }
+    .coverage-content {
+      max-width: 1000px;
+      margin: 0 auto;
+      text-align: center;
+    }
+    .coverage-tags {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 10px;
+      margin-top: 24px;
+    }
+    .tag {
+      background: #EFF6FF;
+      color: var(--primary);
+      padding: 8px 16px;
+      border-radius: 20px;
+      font-size: 13px;
+      font-weight: 700;
+      border: 1px solid #BFDBFE;
+    }
+
+    /* LEGAL & PRIVACY */
+    .legal {
+      padding: 60px 20px;
+      max-width: 900px;
+      margin: 0 auto;
+    }
+    .legal h2 {
+      font-size: 22px;
+      font-weight: 800;
+      color: var(--primary);
+      margin-bottom: 16px;
+    }
+    .legal p {
+      font-size: 14px;
+      color: var(--gray);
+      margin-bottom: 14px;
+    }
+
+    /* FOOTER */
+    footer {
+      background: var(--dark);
+      color: #94A3B8;
+      padding: 40px 20px 20px;
+      text-align: center;
+      font-size: 13px;
+    }
+    footer a { color: var(--secondary); text-decoration: none; }
+  </style>
+</head>
+<body>
+
+  <!-- HEADER -->
+  <header>
+    <div class="nav-container">
+      <a href="#" class="brand">
+        <img src="https://raw.githubusercontent.com/guisse12/LogeEtudiant/main/assets/logo.png" alt="Logetu" class="brand-logo" onerror="this.style.display='none'">
+        <div>
+          <div class="brand-name">Logetu</div>
+          <div class="brand-tagline">Sénégal</div>
+        </div>
+      </a>
+      <a href="#contact" class="nav-btn">Contact</a>
+    </div>
+  </header>
+
+  <!-- HERO SECTION -->
+  <section class="hero">
+    <div class="hero-content">
+      <div class="badge">🇸🇳 Application Officielle de Logement Étudiant</div>
+      <h1>Trouvez votre logement étudiant en toute confiance au Sénégal</h1>
+      <p>Logetu connecte directement les étudiants des universités et grandes écoles du Sénégal avec des bailleurs certifiés et des camarades pour la colocation.</p>
+      <div class="hero-buttons">
+        <a href="#services" class="btn-main">Découvrir les services</a>
+        <a href="#legal" class="btn-outline">Sécurité & SMS OTP</a>
+      </div>
+    </div>
+  </section>
+
+  <!-- FEATURES -->
+  <section class="features" id="services">
+    <h2 class="section-title">Nos fonctionnalités clés</h2>
+    <div class="grid">
+      <div class="card">
+        <div class="card-icon">🎓</div>
+        <h3>Espace Étudiants</h3>
+        <p>Recherche géolocalisée de studios, chambres et appartements autour de votre campus (UCAD, UGB, UIDT, UADB, etc.). Filtres par budget et commodités.</p>
+      </div>
+
+      <div class="card">
+        <div class="card-icon">🏠</div>
+        <h3>Bailleurs Certifiés</h3>
+        <p>Espace dédié aux propriétaires avec vérification d'identité, gestion des annonces immobilières et mise en relation directe par WhatsApp et téléphone.</p>
+      </div>
+
+      <div class="card">
+        <div class="card-icon">🤝</div>
+        <h3>Recherche de Colocataires</h3>
+        <p>Publiez et consultez les annonces de colocation entre étudiants pour partager un logement et réduire vos frais de loyer mensuel.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- CAMPUS COVERAGE -->
+  <section class="coverage">
+    <div class="coverage-content">
+      <h2 style="font-size: 22px; font-weight: 800; color: #0F172A;">Présent dans toutes les zones universitaires du Sénégal</h2>
+      <p style="color: #64748B; font-size: 14px; margin-top: 6px;">Synchronisé avec la nomenclature officielle de l'enseignement supérieur.</p>
+      <div class="coverage-tags">
+        <span class="tag">Dakar (UCAD, ESTM, ESMT, ISM, SupDeCo)</span>
+        <span class="tag">Saint-Louis (UGB)</span>
+        <span class="tag">Thiès (UIDT, EPT)</span>
+        <span class="tag">Diourbel / Bambey (UADB)</span>
+        <span class="tag">Diamniadio (UAM, URDFS)</span>
+        <span class="tag">Kaolack (USSEIN)</span>
+        <span class="tag">Ziguinchor (UASZ)</span>
+        <span class="tag">Kolda (Campus UASZ)</span>
+        <span class="tag">Matam (USNM)</span>
+        <span class="tag">Tambacounda (USO)</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- LEGAL & PRIVACY NOTICE -->
+  <section class="legal" id="legal">
+    <h2>Vérification par SMS & Confidentialité (Logetu OTP)</h2>
+    <p>Pour assurer la sécurité de notre communauté, chaque compte utilisateur (étudiant ou bailleur) est rattaché à un <strong>numéro de téléphone sénégalais unique</strong> validé par un code SMS OTP (One-Time Password) à 6 chiffres via notre passerelle télécom partenaire.</p>
+    <p>Les données collectées (numéro de téléphone, nom, justificatifs) sont strictement confidentielles et utilisées uniquement pour la sécurisation des échanges et l'accès à la plateforme.</p>
+
+    <div style="margin-top: 30px;" id="contact">
+      <h2>Coordonnées Officielles</h2>
+      <p><strong>Plateforme :</strong> Logetu (LogeEtudiant Sénégal)</p>
+      <p><strong>Siège :</strong> Sandiara, Région de Thiès, Sénégal</p>
+      <p><strong>Contact Téléphone :</strong> +221 76 331 81 57</p>
+      <p><strong>Code source & Projet :</strong> <a href="https://github.com/guisse12/LogeEtudiant" target="_blank" style="color: #003880; font-weight: 700;">github.com/guisse12/LogeEtudiant</a></p>
+    </div>
+  </section>
+
+  <!-- FOOTER -->
+  <footer>
+    <p>&copy; 2026 Logetu Sénégal. Tous droits réservés.</p>
+    <p style="margin-top: 8px;">Conçu pour faciliter la vie universitaire des étudiants au Sénégal.</p>
+  </footer>
+
+</body>
+</html>
