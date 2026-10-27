@@ -336,7 +336,7 @@ export default function AdminHomeScreen({ navigation }) {
             />
             <View>
               <Text style={styles.badgeSystem}>Administration Centrale</Text>
-              <Text style={styles.title}>Logetu Admin</Text>
+              <Text style={styles.title}>Logetudiant Admin</Text>
             </View>
           </View>
         </View>
@@ -702,7 +702,7 @@ export default function AdminHomeScreen({ navigation }) {
       <View style={styles.footerAudit}>
         <Ionicons name="lock-closed" size={14} color="#718096" style={{ marginRight: 6 }} />
         <Text style={styles.footerAuditText}>
-          Plateforme sécurisée Logetu • Version 1.0.0 Pro
+          Plateforme sécurisée Logetudiant • Version 1.0.0 Pro
         </Text>
       </View>
 

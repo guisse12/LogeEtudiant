@@ -337,7 +337,7 @@ export default function ProfileScreen({ navigation }) {
           <View style={styles.adminNoticeBox}>
             <Ionicons name="lock-closed" size={16} color="#003880" style={{ marginRight: 6 }} />
             <Text style={styles.adminNoticeText}>
-              Ce compte dispose des autorisations complètes sur la modération des logements et la sécurité de Logetu.
+              Ce compte dispose des autorisations complètes sur la modération des logements et la sécurité de Logetudiant.
             </Text>
           </View>
         )}

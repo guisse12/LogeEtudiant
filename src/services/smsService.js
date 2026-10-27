@@ -1,5 +1,5 @@
 /**
- * Service d'envoi de SMS réels pour Logetu Sénégal
+ * Service d'envoi de SMS réels pour Logetudiant Sénégal
  * Permet l'envoi de vrais SMS vers l'application Messages du téléphone
  * via une passerelle télécom (Twilio, Orange Sénégal, Termii, Infobip)
  */
@@ -13,20 +13,20 @@ export const SMS_CONFIG = {
   PROVIDER: 'TERMII',
 
   // Nom d'expéditeur officiel (11 caractères max selon standard GSM)
-  SENDER_NAME: 'Logetu',
+  SENDER_NAME: 'Logetudiant',
 
   // 1. Configuration TERMII (https://termii.com - affiché sur votre écran)
   TERMII: {
     API_KEY: 'tlv_BGpMjZK24E8DyDacz6-8WQJz4c16ii3kU3wdmqjeaU4', // Votre Clé API Termii active
     BASE_URL: 'https://v4.api.termii.com',                       // URL de base visible sur votre écran Termii
-    SENDER_ID: 'Logetu',                                        // Votre Sender ID soumis
+    SENDER_ID: 'Logetudiant',                                   // Votre Sender ID soumis
   },
 
   // 2. Configuration TWILIO (https://www.twilio.com)
   TWILIO: {
     ACCOUNT_SID: '',     // Ex: ACxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
     AUTH_TOKEN: '',      // Ex: your_auth_token
-    FROM_NUMBER: '',     // Ex: +1234567890 ou 'Logetu'
+    FROM_NUMBER: '',     // Ex: +1234567890 ou 'Logetudiant'
   },
 
   // 3. Configuration ORANGE SÉNÉGAL (https://developer.orange.com)
@@ -66,13 +66,13 @@ export const sendRealSms = async (phone, codeOrMessage, type = 'inscription') =>
   if (type === 'custom') {
     messageBody = String(codeOrMessage);
   } else if (type === 'recuperation') {
-    messageBody = `Logetu : Votre code de réinitialisation est ${codeOrMessage}. Ne le partagez avec personne.`;
+    messageBody = `Logetudiant : Votre code de réinitialisation est ${codeOrMessage}. Ne le partagez avec personne.`;
   } else if (type === 'bailleur_valide') {
-    messageBody = `Logetu : Félicitations ! Votre compte bailleur a été validé et certifié. Vous pouvez désormais publier vos logements.`;
+    messageBody = `Logetudiant : Félicitations ! Votre compte bailleur a été validé et certifié. Vous pouvez désormais publier vos logements.`;
   } else if (type === 'bailleur_rejete') {
-    messageBody = `Logetu : Votre demande de compte bailleur n'a pas été validée. Veuillez vérifier vos pièces justificatives sur votre compte.`;
+    messageBody = `Logetudiant : Votre demande de compte bailleur n'a pas été validée. Veuillez vérifier vos pièces justificatives sur votre compte.`;
   } else {
-    messageBody = `Logetu : Votre code de confirmation est ${codeOrMessage}. Ne le partagez avec personne.`;
+    messageBody = `Logetudiant : Votre code de confirmation est ${codeOrMessage}. Ne le partagez avec personne.`;
   }
 
   try {

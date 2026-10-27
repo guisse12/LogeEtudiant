@@ -281,7 +281,7 @@ export default function LoginScreen({ navigation, route }) {
         </View>
 
         <Text style={styles.title}>Connexion</Text>
-        <Text style={styles.subtitle}>Bienvenue sur Logetu Sénégal</Text>
+        <Text style={styles.subtitle}>Bienvenue sur Logetudiant Sénégal</Text>
 
         {/* CHAMP NUMÉRO DE TÉLÉPHONE (9 CHIFFRES) */}
         <View style={styles.inputContainer}>

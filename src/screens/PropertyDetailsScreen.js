@@ -187,7 +187,7 @@ export default function PropertyDetailsScreen({ route, navigation }) {
       cleanPhone = `221${cleanPhone}`;
     }
 
-    const message = `Bonjour, je suis intéressé(e) par votre logement "${titreBien || 'étudiant'}" vu sur Logetu. Est-il toujours disponible ?`;
+    const message = `Bonjour, je suis intéressé(e) par votre logement "${titreBien || 'étudiant'}" vu sur Logetudiant. Est-il toujours disponible ?`;
     const whatsappUrl = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(message)}`;
 
     Linking.openURL(whatsappUrl).catch(() => {

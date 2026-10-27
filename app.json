@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "Logetu",
+    "name": "Logetudiant",
     "slug": "LogeEtudiant",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -9,8 +9,8 @@
     "ios": {
       "supportsTablet": true,
       "infoPlist": {
-        "NSLocationWhenInUseUsageDescription": "Logetu a besoin de votre position pour afficher les logements étudiants autour de vous.",
-        "NSPhotoLibraryUsageDescription": "Logetu a besoin d'accéder à vos photos pour vous permettre de publier des logements.",
+        "NSLocationWhenInUseUsageDescription": "Logetudiant a besoin de votre position pour afficher les logements étudiants autour de vous.",
+        "NSPhotoLibraryUsageDescription": "Logetudiant a besoin d'accéder à vos photos pour vous permettre de publier des logements.",
         "LSApplicationQueriesSchemes": [
           "whatsapp",
           "tel",
@@ -52,13 +52,13 @@
       [
         "expo-location",
         {
-          "locationAlwaysAndWhenInUsePermission": "Autoriser Logetu à utiliser votre position pour afficher les logements autour de vous."
+          "locationAlwaysAndWhenInUsePermission": "Autoriser Logetudiant à utiliser votre position pour afficher les logements autour de vous."
         }
       ],
       [
         "expo-image-picker",
         {
-          "photosPermission": "Autoriser Logetu à accéder à vos photos pour ajouter des images de logement."
+          "photosPermission": "Autoriser Logetudiant à accéder à vos photos pour ajouter des images de logement."
         }
       ],
       "expo-font",

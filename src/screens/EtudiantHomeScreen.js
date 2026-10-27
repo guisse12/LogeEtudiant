@@ -224,7 +224,7 @@ export default function EtudiantHomeScreen({ navigation }) {
     }
 
     const prenom = nomEtudiant ? nomEtudiant.split(' ')[0] : 'camarade';
-    const message = `Bonjour ${prenom}, j'ai vu votre recherche de colocation (${universiteId || 'Campus'}) sur Logetu. Êtes-vous toujours à la recherche d'un colocataire ?`;
+    const message = `Bonjour ${prenom}, j'ai vu votre recherche de colocation (${universiteId || 'Campus'}) sur Logetudiant. Êtes-vous toujours à la recherche d'un colocataire ?`;
     const whatsappUrl = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(message)}`;
 
     Linking.openURL(whatsappUrl).catch(() => {
@@ -271,7 +271,7 @@ export default function EtudiantHomeScreen({ navigation }) {
       cleanPhone = `221${cleanPhone}`;
     }
 
-    const message = `Bonjour, je suis intéressé(e) par votre logement "${titreBien || 'étudiant'}" vu sur Logetu. Est-il toujours disponible ?`;
+    const message = `Bonjour, je suis intéressé(e) par votre logement "${titreBien || 'étudiant'}" vu sur Logetudiant. Est-il toujours disponible ?`;
     const whatsappUrl = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(message)}`;
 
     Linking.openURL(whatsappUrl).catch(() => {
@@ -291,7 +291,7 @@ export default function EtudiantHomeScreen({ navigation }) {
             resizeMode="contain" 
           />
           <View>
-            <Text style={styles.navBrand}>Logetu</Text>
+            <Text style={styles.navBrand}>Logetudiant</Text>
             <Text style={styles.navTagline}>Logements près de votre campus</Text>
           </View>
         </View>

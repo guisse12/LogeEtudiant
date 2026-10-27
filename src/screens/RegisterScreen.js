@@ -173,7 +173,7 @@ export default function RegisterScreen({ navigation, route }) {
 
     setLoading(true);
     try {
-      // 1. Contrôle strict d'unicité : 1 numéro de téléphone = 1 et 1 seul compte Logetu
+      // 1. Contrôle strict d'unicité : 1 numéro de téléphone = 1 et 1 seul compte Logetudiant
       const checkResult = await isPhoneAlreadyRegistered(cleanPhone);
       
       if (checkResult.networkError) {
@@ -186,7 +186,7 @@ export default function RegisterScreen({ navigation, route }) {
         setLoading(false);
         Alert.alert(
           "Numéro déjà enregistré",
-          `Le numéro +221 ${cleanPhone} est déjà associé à un compte Logetu.\n\nChaque numéro de téléphone ne peut avoir qu'un seul et unique compte.`,
+          `Le numéro +221 ${cleanPhone} est déjà associé à un compte Logetudiant.\n\nChaque numéro de téléphone ne peut avoir qu'un seul et unique compte.`,
           [
             {
               text: "Se connecter",
@@ -334,7 +334,7 @@ export default function RegisterScreen({ navigation, route }) {
         </View>
 
         <Text style={styles.title}>Créer un compte</Text>
-        <Text style={styles.subtitle}>Rejoignez la communauté Logetu Sénégal</Text>
+        <Text style={styles.subtitle}>Rejoignez la communauté Logetudiant Sénégal</Text>
 
         {/* SÉLECTEUR DE RÔLE MODERNE */}
         <View style={styles.roleContainer}>

@@ -95,7 +95,7 @@ export default function ColocatairesScreen({ navigation }) {
     }
 
     const prenom = nomEtudiant ? nomEtudiant.split(' ')[0] : 'camarade';
-    const message = `Bonjour ${prenom}, j'ai vu votre annonce de colocation (${universiteId || 'Logetu'}) sur l'application Logetu. Êtes-vous toujours à la recherche d'un colocataire ?`;
+    const message = `Bonjour ${prenom}, j'ai vu votre annonce de colocation (${universiteId || 'Logetudiant'}) sur l'application Logetudiant. Êtes-vous toujours à la recherche d'un colocataire ?`;
     const whatsappUrl = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(message)}`;
 
     Linking.openURL(whatsappUrl).catch((err) => {

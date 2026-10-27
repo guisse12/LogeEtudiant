@@ -62,7 +62,7 @@ export default function FavorisScreen({ navigation }) {
       cleanPhone = `221${cleanPhone}`;
     }
 
-    const message = `Bonjour, je suis intéressé(e) par votre logement "${titre || 'étudiant'}" vu dans mes favoris sur Logetu.`;
+    const message = `Bonjour, je suis intéressé(e) par votre logement "${titre || 'étudiant'}" vu dans mes favoris sur Logetudiant.`;
     const url = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(message)}`;
 
     Linking.openURL(url).catch((err) => {

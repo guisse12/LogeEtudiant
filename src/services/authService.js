@@ -58,7 +58,7 @@ export const phoneToAuthEmail = (phone) => {
   return `${digits}@logeetudiant.sn`;
 };
 
-// Vérifier strictement si un numéro de téléphone est déjà associé à un compte Logetu (Optimisé ultra-rapide)
+// Vérifier strictement si un numéro de téléphone est déjà associé à un compte Logetudiant (Optimisé ultra-rapide)
 export const isPhoneAlreadyRegistered = async (phone) => {
   const cleanPhone = cleanPhoneDigits(phone);
   if (!cleanPhone || cleanPhone.length < 8) {
@@ -195,7 +195,7 @@ export const sendPhoneVerificationCode = async (phone, type = 'inscription') => 
       code: code,
       cleanPhone: cleanPhone,
       delivered: smsResult?.delivered || false,
-      message: `Votre code de confirmation Logetu est : ${code}`
+      message: `Votre code de confirmation Logetudiant est : ${code}`
     };
   } catch (smsErr) {
     if (isNetworkError(smsErr)) {
@@ -210,7 +210,7 @@ export const sendPhoneVerificationCode = async (phone, type = 'inscription') => 
       code: code,
       cleanPhone: cleanPhone,
       delivered: false,
-      message: `Votre code de confirmation Logetu est : ${code}`
+      message: `Votre code de confirmation Logetudiant est : ${code}`
     };
   }
 };
@@ -278,7 +278,7 @@ export const registerUserWithPhone = async (phone, password, userData) => {
     return {
       success: false,
       errorType: 'PHONE_EXISTS',
-      error: "Ce numéro de téléphone est déjà associé à un compte Logetu. Veuillez vous connecter."
+      error: "Ce numéro de téléphone est déjà associé à un compte Logetudiant. Veuillez vous connecter."
     };
   }
 

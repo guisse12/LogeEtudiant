@@ -308,7 +308,7 @@ export default function BailleurHomeScreen({ navigation }) {
       } else {
         propertyData.createdAt = new Date();
         await addDoc(collection(db, "properties"), propertyData);
-        Alert.alert("Félicitations 🎉", "Votre bien a été publié avec succès sur Logetu.");
+        Alert.alert("Félicitations 🎉", "Votre bien a été publié avec succès sur Logetudiant.");
       }
 
       setModalVisible(false);
