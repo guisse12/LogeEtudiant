@@ -190,11 +190,17 @@ export const sendPhoneVerificationCode = async (phone, type = 'inscription') => 
   try {
     const smsResult = await sendRealSms(cleanPhone, code, type);
 
+    // Mémoriser la session Firebase si disponible
+    if (smsResult?.sessionInfo) {
+      AsyncStorage.setItem('@pending_session_' + cleanPhone, smsResult.sessionInfo).catch(() => {});
+    }
+
     return { 
       success: true, 
       code: code,
       cleanPhone: cleanPhone,
       delivered: smsResult?.delivered || false,
+      provider: smsResult?.provider || 'TERMII',
       message: `Votre code de confirmation Logetudiant est : ${code}`
     };
   } catch (smsErr) {
@@ -243,7 +249,26 @@ export const verifyPhoneCode = async (phone, enteredCode, expectedCode = null) =
     }
   } catch (e) {}
 
-  // 3. Vérification de secours dans Firestore
+  // 3. Vérification via Firebase Identity Toolkit (si session SMS envoyée par Google)
+  try {
+    const sessionInfo = await AsyncStorage.getItem('@pending_session_' + cleanPhone);
+    if (sessionInfo) {
+      const apiKey = "AIzaSyCwqZASk4uvCZCZidBLL3sobSEQkBxjLBo";
+      const endpoint = `https://identitytoolkit.googleapis.com/v1/accounts:signInWithPhoneNumber?key=${apiKey}`;
+      const resp = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sessionInfo, code: cleanEntered }),
+      });
+      const data = await resp.json().catch(() => ({}));
+      if (resp.ok && data.idToken) {
+        AsyncStorage.removeItem('@pending_session_' + cleanPhone).catch(() => {});
+        return { success: true, verifiedByFirebase: true, uid: data.localId };
+      }
+    }
+  } catch (e) {}
+
+  // 4. Vérification de secours dans Firestore
   try {
     const verifSnap = await getDoc(doc(db, "phone_verifications", cleanPhone));
     if (verifSnap.exists()) {

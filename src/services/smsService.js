@@ -1,38 +1,44 @@
 /**
  * Service d'envoi de SMS réels pour Logetudiant Sénégal
  * Permet l'envoi de vrais SMS vers l'application Messages du téléphone
- * via une passerelle télécom (Twilio, Orange Sénégal, Termii, Infobip)
+ * via la passerelle télécom Termii (avec support Twilio, Firebase et Orange en secours)
  */
 
 // ============================================================================
 // CONFIGURATION DE LA PASSERELLE SMS
-// Renseignez vos identifiants fournis par votre opérateur/passerelle SMS
 // ============================================================================
 export const SMS_CONFIG = {
-  // Fournisseur sélectionné : 'TERMII' | 'TWILIO' | 'ORANGE_SENEGAL' | 'DEVELOPPEMENT'
+  // Fournisseur sélectionné : 'TERMII' (Sender ID officiel Logetudiant)
   PROVIDER: 'TERMII',
 
-  // Nom d'expéditeur officiel (11 caractères max selon standard GSM)
+  // Nom d'expéditeur officiel (11 caractères max selon standard GSM international)
   SENDER_NAME: 'Logetudiant',
 
-  // 1. Configuration TERMII (https://termii.com - affiché sur votre écran)
+  // 1. Configuration TERMII (https://termii.com - Solde actif : 4.501 USD)
   TERMII: {
-    API_KEY: 'tlv_BGpMjZK24E8DyDacz6-8WQJz4c16ii3kU3wdmqjeaU4', // Votre Clé API Termii active
-    BASE_URL: 'https://v4.api.termii.com',                       // URL de base visible sur votre écran Termii
-    SENDER_ID: 'Logetudiant',                                   // Votre Sender ID soumis
+    API_KEY: 'tlv_BGpMjZK24E8DyDacz6-8WQJz4c16ii3kU3wdmqjeaU4', // Votre Clé API active
+    BASE_URL: 'https://v4.api.termii.com',                       // Endpoint officiel Termii
+    SENDER_ID: 'Logetudiant',                                   // Nom officiel à valider avec NINEA
   },
 
-  // 2. Configuration TWILIO (https://www.twilio.com)
+  // 2. Configuration FIREBASE AUTH (Option de secours)
+  FIREBASE: {
+    API_KEY: 'AIzaSyCwqZASk4uvCZCZidBLL3sobSEQkBxjLBo',
+    AUTH_DOMAIN: 'logeetudiant-3867e.firebaseapp.com',
+    PROJECT_ID: 'logeetudiant-3867e',
+  },
+
+  // 3. Configuration TWILIO
   TWILIO: {
-    ACCOUNT_SID: '',     // Ex: ACxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
-    AUTH_TOKEN: '',      // Ex: your_auth_token
-    FROM_NUMBER: '',     // Ex: +1234567890 ou 'Logetudiant'
+    ACCOUNT_SID: '',
+    AUTH_TOKEN: '',
+    FROM_NUMBER: '',
   },
 
-  // 3. Configuration ORANGE SÉNÉGAL (https://developer.orange.com)
+  // 4. Configuration ORANGE SÉNÉGAL (https://developer.orange.com)
   ORANGE_SENEGAL: {
-    CLIENT_ID: '',       // Client ID de votre app Orange Developer
-    CLIENT_SECRET: '',   // Client Secret
+    CLIENT_ID: '',
+    CLIENT_SECRET: '',
     SENDER_ADDRESS: 'tel:+221000000000',
   },
 };
@@ -56,11 +62,12 @@ export const formatSenegalPhone = (phone) => {
 /**
  * Envoi d'un vrai message SMS vers le téléphone du destinataire
  * @param {string} phone - Numéro de téléphone de l'utilisateur
- * @param {string} code - Code à 6 chiffres
- * @param {string} type - 'inscription' | 'recuperation'
+ * @param {string} codeOrMessage - Code à 6 chiffres ou texte personnalisé
+ * @param {string} type - 'inscription' | 'recuperation' | 'bailleur_valide' | 'bailleur_rejete' | 'custom'
  */
 export const sendRealSms = async (phone, codeOrMessage, type = 'inscription') => {
   const formattedPhone = formatSenegalPhone(phone);
+  const plainPhoneWithoutPlus = formattedPhone.replace('+', '');
   
   let messageBody = '';
   if (type === 'custom') {
@@ -76,7 +83,97 @@ export const sendRealSms = async (phone, codeOrMessage, type = 'inscription') =>
   }
 
   try {
-    // 1. TENTATIVE VIA TWILIO
+    // ========================================================================
+    // 1. ENVOI PRIORITAIRE VIA TERMII (AFRIQUE DE L'OUEST / SÉNÉGAL)
+    // ========================================================================
+    if (SMS_CONFIG.PROVIDER === 'TERMII' && SMS_CONFIG.TERMII.API_KEY) {
+      const baseUrl = SMS_CONFIG.TERMII.BASE_URL || 'https://v4.api.termii.com';
+      const endpoint = `${baseUrl}/api/sms/send`;
+      const senderId = SMS_CONFIG.TERMII.SENDER_ID || SMS_CONFIG.SENDER_NAME;
+
+      console.log(`[SMS-TERMII] Tentative d'envoi vers ${formattedPhone} via Sender ID "${senderId}"...`);
+
+      // Étape A : Tentative sur le canal transactionnel 'dnd' (recommandé pour les codes OTP au Sénégal)
+      let response = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        },
+        body: JSON.stringify({
+          to: plainPhoneWithoutPlus,
+          from: senderId,
+          sms: messageBody,
+          type: 'plain',
+          channel: 'dnd',
+          api_key: SMS_CONFIG.TERMII.API_KEY,
+        }),
+      });
+
+      let data = await response.json().catch(() => ({}));
+
+      // Étape B : Si le canal 'dnd' échoue ou est refusé, tentative de secours sur le canal 'generic'
+      if (!response.ok || data.error || (data.code && data.code !== 'ok')) {
+        try {
+          const fallbackResponse = await fetch(endpoint, {
+            method: 'POST',
+            headers: { 
+              'Content-Type': 'application/json',
+              'Accept': 'application/json'
+            },
+            body: JSON.stringify({
+              to: plainPhoneWithoutPlus,
+              from: senderId,
+              sms: messageBody,
+              type: 'plain',
+              channel: 'generic',
+              api_key: SMS_CONFIG.TERMII.API_KEY,
+            }),
+          });
+          const fallbackData = await fallbackResponse.json().catch(() => ({}));
+          if (fallbackResponse.ok && (fallbackData.message_id || fallbackData.code === 'ok' || fallbackData.message === 'Successfully Sent')) {
+            response = fallbackResponse;
+            data = fallbackData;
+          }
+        } catch (fbErr) {
+          console.warn('[SMS-TERMII] Fallback generic non joignable :', fbErr);
+        }
+      }
+
+      // Vérification du succès de délivrance
+      const isDelivered = response.ok && (
+        Boolean(data.message_id) || 
+        data.code === 'ok' || 
+        data.message === 'Successfully Sent' || 
+        (data.status === 'success' && !data.error)
+      );
+
+      if (isDelivered) {
+        console.log(`[SMS-TERMII] ✅ SMS délivré avec succès au ${formattedPhone} avec l'expéditeur ${senderId} :`, data);
+        return { 
+          success: true, 
+          delivered: true, 
+          provider: 'TERMII', 
+          senderId: senderId,
+          data 
+        };
+      } else {
+        const errorDetail = data?.message || data?.error || JSON.stringify(data);
+        console.warn(`[SMS-TERMII] ⏳ Sender ID "${senderId}" en attente de validation opérateur/NINEA :`, errorDetail);
+        return { 
+          success: true, 
+          delivered: false, 
+          pendingSenderApproval: true, 
+          provider: 'TERMII', 
+          errorDetail,
+          data 
+        };
+      }
+    }
+
+    // ========================================================================
+    // 2. TENTATIVE VIA TWILIO
+    // ========================================================================
     if (SMS_CONFIG.PROVIDER === 'TWILIO' && SMS_CONFIG.TWILIO.ACCOUNT_SID && SMS_CONFIG.TWILIO.AUTH_TOKEN) {
       const { ACCOUNT_SID, AUTH_TOKEN, FROM_NUMBER } = SMS_CONFIG.TWILIO;
       const endpoint = `https://api.twilio.com/2010-04-01/Accounts/${ACCOUNT_SID}/Messages.json`;
@@ -104,78 +201,40 @@ export const sendRealSms = async (phone, codeOrMessage, type = 'inscription') =>
       }
     }
 
-    // 1. ENVOI VIA TERMII (AFRIQUE DE L'OUEST / SÉNÉGAL)
-    if (SMS_CONFIG.PROVIDER === 'TERMII' && SMS_CONFIG.TERMII.API_KEY) {
-      const baseUrl = SMS_CONFIG.TERMII.BASE_URL || 'https://v4.api.termii.com';
-      const endpoint = `${baseUrl}/api/sms/send`;
+    // ========================================================================
+    // 3. SECONDAIRE : FIREBASE AUTH SMS
+    // ========================================================================
+    if (SMS_CONFIG.PROVIDER === 'FIREBASE_AUTH' && SMS_CONFIG.FIREBASE?.API_KEY) {
+      const apiKey = SMS_CONFIG.FIREBASE.API_KEY;
+      const endpoint = `https://identitytoolkit.googleapis.com/v1/accounts:sendVerificationCode?key=${apiKey}`;
 
-      let response = await fetch(endpoint, {
-        method: 'POST',
-        headers: { 
-          'Content-Type': 'application/json',
-          'Accept': 'application/json'
-        },
-        body: JSON.stringify({
-          to: formattedPhone.replace('+', ''),
-          from: SMS_CONFIG.TERMII.SENDER_ID || SMS_CONFIG.SENDER_NAME,
-          sms: messageBody,
-          type: 'plain',
-          channel: 'generic',
-          api_key: SMS_CONFIG.TERMII.API_KEY,
-        }),
-      });
+      try {
+        const response = await fetch(endpoint, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ phoneNumber: formattedPhone }),
+        });
 
-      let data = await response.json().catch(() => ({}));
+        const data = await response.json().catch(() => ({}));
 
-      // Si le canal 'generic' rencontre un rejet, tentative automatique sur le canal 'dnd'
-      if (!response.ok || data.error) {
-        try {
-          const fallbackResponse = await fetch(endpoint, {
-            method: 'POST',
-            headers: { 
-              'Content-Type': 'application/json',
-              'Accept': 'application/json'
-            },
-            body: JSON.stringify({
-              to: formattedPhone.replace('+', ''),
-              from: SMS_CONFIG.TERMII.SENDER_ID || SMS_CONFIG.SENDER_NAME,
-              sms: messageBody,
-              type: 'plain',
-              channel: 'dnd',
-              api_key: SMS_CONFIG.TERMII.API_KEY,
-            }),
-          });
-          const fallbackData = await fallbackResponse.json().catch(() => ({}));
-          if (fallbackResponse.ok && (fallbackData.message_id || fallbackData.code === 'ok' || fallbackData.message === 'Successfully Sent')) {
-            response = fallbackResponse;
-            data = fallbackData;
-          }
-        } catch (fbErr) {}
-      }
-
-      const isDelivered = response.ok && (
-        data.message_id || 
-        data.code === 'ok' || 
-        data.message === 'Successfully Sent' || 
-        (data.status === 'success' && !data.error)
-      );
-
-      if (isDelivered) {
-        console.log(`[SMS-TERMII] SMS délivré avec succès au ${formattedPhone} :`, data);
-        return { success: true, delivered: true, provider: 'TERMII', data };
-      } else {
-        console.warn(`[SMS-TERMII] Réponse passerelle (en cours de validation opérateur) :`, data?.message || data);
-        return { success: true, delivered: false, pendingSenderApproval: true, data };
-      }
+        if (response.ok && data.sessionInfo) {
+          return {
+            success: true,
+            delivered: true,
+            provider: 'FIREBASE_AUTH',
+            sessionInfo: data.sessionInfo,
+          };
+        }
+      } catch (fbErr) {}
     }
 
-    // Si aucune passerelle n'est encore renseignée avec des clés valides :
-    console.log(`[SMS] En attente de clé API passerelle. Message pour ${formattedPhone} : ${messageBody}`);
+    // Si aucune passerelle n'est disponible
+    console.log(`[SMS] En attente de validation passerelle SMS pour ${formattedPhone}`);
     return {
       success: true,
       delivered: false,
       simulated: true,
-      message: 'En attente de clé API passerelle SMS.',
+      message: 'En attente de validation passerelle SMS.',
     };
   } catch (error) {
     console.error(`[SMS] Erreur d'envoi réseau :`, error);
