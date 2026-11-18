@@ -93,7 +93,7 @@ export const sendRealSms = async (phone, codeOrMessage, type = 'inscription') =>
 
       console.log(`[SMS-TERMII] Tentative d'envoi vers ${formattedPhone} via Sender ID "${senderId}"...`);
 
-      // Étape A : Tentative sur le canal transactionnel 'dnd' (recommandé pour les codes OTP au Sénégal)
+      // Étape A : Envoi officiel sur le canal 'generic' recommandé et activé par Termii pour le Sénégal
       let response = await fetch(endpoint, {
         method: 'POST',
         headers: { 
@@ -105,14 +105,14 @@ export const sendRealSms = async (phone, codeOrMessage, type = 'inscription') =>
           from: senderId,
           sms: messageBody,
           type: 'plain',
-          channel: 'dnd',
+          channel: 'generic',
           api_key: SMS_CONFIG.TERMII.API_KEY,
         }),
       });
 
       let data = await response.json().catch(() => ({}));
 
-      // Étape B : Si le canal 'dnd' échoue ou est refusé, tentative de secours sur le canal 'generic'
+      // Étape B : Si échec ou refus, tentative de secours sur le canal 'dnd'
       if (!response.ok || data.error || (data.code && data.code !== 'ok')) {
         try {
           const fallbackResponse = await fetch(endpoint, {
@@ -126,7 +126,7 @@ export const sendRealSms = async (phone, codeOrMessage, type = 'inscription') =>
               from: senderId,
               sms: messageBody,
               type: 'plain',
-              channel: 'generic',
+              channel: 'dnd',
               api_key: SMS_CONFIG.TERMII.API_KEY,
             }),
           });
@@ -136,7 +136,7 @@ export const sendRealSms = async (phone, codeOrMessage, type = 'inscription') =>
             data = fallbackData;
           }
         } catch (fbErr) {
-          console.warn('[SMS-TERMII] Fallback generic non joignable :', fbErr);
+          console.warn('[SMS-TERMII] Fallback dnd non joignable :', fbErr);
         }
       }
 

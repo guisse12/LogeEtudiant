@@ -20,6 +20,7 @@ import { db, auth } from '../config/firebase';
 import { logoutUser } from '../services/authService';
 import { formatCleanFullName } from '../utils/nameFormatter';
 import { UNIVERSITES, SENEGAL_REGIONS } from '../services/universityService';
+import { registerForPushNotificationsAsync, subscribeToUserNotifications } from '../services/notificationService';
 
 const ZONES_UNIVERSITAIRES = [
   { id: 'TOUS', nom: 'Toutes les zones' },
@@ -61,6 +62,21 @@ export default function EtudiantHomeScreen({ navigation }) {
   const [activeBottomTab, setActiveBottomTab] = useState('accueil'); // 'accueil', 'nouveautes', 'recents', 'favoris'
   const [searchQuery, setSearchQuery] = useState('');
   const [maxPrice, setMaxPrice] = useState('');
+  const [unreadNotifsCount, setUnreadNotifsCount] = useState(0);
+
+  // Initialisation des notifications Push & Écoute de la cloche en direct
+  useEffect(() => {
+    const currentUid = auth.currentUser?.uid;
+    if (currentUid) {
+      registerForPushNotificationsAsync(currentUid);
+      const unsub = subscribeToUserNotifications(currentUid, ({ unreadCount }) => {
+        setUnreadNotifsCount(unreadCount);
+      });
+      return () => {
+        if (typeof unsub === 'function') unsub();
+      };
+    }
+  }, []);
 
   const fetchFavorisIds = async () => {
     try {
@@ -254,8 +270,29 @@ export default function EtudiantHomeScreen({ navigation }) {
   };
 
   const handleLogout = async () => {
-    await logoutUser();
-    navigation.replace('Login');
+    Alert.alert(
+      "Déconnexion",
+      "Voulez-vous vraiment vous déconnecter de votre compte ?",
+      [
+        { text: "Annuler", style: "cancel" },
+        { 
+          text: "Se déconnecter", 
+          style: "destructive",
+          onPress: async () => {
+            try {
+              const res = await logoutUser();
+              if (res && res.success) {
+                navigation.replace('Login');
+              } else {
+                navigation.replace('Login');
+              }
+            } catch (e) {
+              navigation.replace('Login');
+            }
+          }
+        }
+      ]
+    );
   };
 
   const handleContactProprietaire = (telephone, titreBien) => {
@@ -297,6 +334,21 @@ export default function EtudiantHomeScreen({ navigation }) {
         </View>
 
         <View style={styles.navRight}>
+          <TouchableOpacity 
+            style={styles.navIconBtn} 
+            onPress={() => navigation.navigate('Notifications')}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
+            <Ionicons name="notifications-outline" size={20} color="#003880" />
+            {unreadNotifsCount > 0 && (
+              <View style={styles.notifBadgeCircle}>
+                <Text style={styles.notifBadgeText}>
+                  {unreadNotifsCount > 9 ? '9+' : unreadNotifsCount}
+                </Text>
+              </View>
+            )}
+          </TouchableOpacity>
+
           <TouchableOpacity 
             style={styles.navIconBtn} 
             onPress={() => navigation.navigate('Conversations')}
@@ -870,6 +922,26 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     marginLeft: 6,
+    position: 'relative',
+  },
+  notifBadgeCircle: {
+    position: 'absolute',
+    top: -3,
+    right: -3,
+    backgroundColor: '#EF4444',
+    minWidth: 16,
+    height: 16,
+    borderRadius: 8,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 3,
+    borderWidth: 1.5,
+    borderColor: '#FFFFFF',
+  },
+  notifBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 9,
+    fontWeight: '800',
   },
   navLogoutBtn: {
     backgroundColor: '#FEF2F2',

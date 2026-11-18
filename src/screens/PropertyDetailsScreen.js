@@ -13,7 +13,10 @@ import {
   Dimensions, 
   SafeAreaView, 
   Platform, 
-  StatusBar 
+  StatusBar,
+  Modal,
+  KeyboardAvoidingView,
+  Keyboard
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { WebView } from 'react-native-webview';
@@ -42,6 +45,16 @@ const PropertyDetailImage = ({ uri }) => {
   );
 };
 
+const MOTIFS_SIGNALEMENT = [
+  { id: 'arnaque', label: "Tentative d'arnaque / Avance d'argent exigée (Wave / OM)", icon: 'alert-circle' },
+  { id: 'faux_numero', label: "Numéro de téléphone faux ou injoignable", icon: 'call' },
+  { id: 'fausses_photos', label: "Photos mensongères ou fausse description", icon: 'images' },
+  { id: 'indisponible', label: "Logement déjà loué ou indisponible", icon: 'home' },
+  { id: 'prix_faux', label: "Loyer réel différent du prix affiché", icon: 'pricetag' },
+  { id: 'comportement', label: "Comportement inapproprié ou harcèlement", icon: 'warning' },
+  { id: 'autre', label: "Autre motif suspect", icon: 'help-circle' },
+];
+
 export default function PropertyDetailsScreen({ route, navigation }) {
   const { property } = route.params;
 
@@ -51,6 +64,12 @@ export default function PropertyDetailsScreen({ route, navigation }) {
   const [newRating, setNewRating] = useState('5');
   const [isFavorite, setIsFavorite] = useState(false);
   const [loadingFavorite, setLoadingFavorite] = useState(true);
+
+  // États pour le signalement détaillé
+  const [reportModalVisible, setReportModalVisible] = useState(false);
+  const [selectedMotif, setSelectedMotif] = useState(MOTIFS_SIGNALEMENT[0].label);
+  const [reportDetails, setReportDetails] = useState('');
+  const [submittingReport, setSubmittingReport] = useState(false);
 
   useEffect(() => {
     checkIfFavorite();
@@ -144,34 +163,124 @@ export default function PropertyDetailsScreen({ route, navigation }) {
     ? (reviews.reduce((acc, curr) => acc + (curr.rating || 5), 0) / reviews.length).toFixed(1)
     : "5.0";
 
-  const handleReportProperty = () => {
-    Alert.alert(
-      "Signaler ce logement",
-      "Pensez-vous qu'il s'agit d'une annonce frauduleuse ou incorrecte ?",
-      [
-        { text: "Annuler", style: "cancel" },
-        { 
-          text: "Oui, signaler", 
-          style: "destructive",
-          onPress: async () => {
-            try {
-              await addDoc(collection(db, "reports"), {
-                propertyId: property.id,
-                propertyTitle: property.titre,
-                reportedBy: auth.currentUser ? auth.currentUser.uid : "anonyme",
-                userEmail: auth.currentUser ? auth.currentUser.email : "Inconnu",
-                date: new Date(),
-                status: "en_attente",
-              });
-              Alert.alert("Signalement reçu", "Merci pour votre vigilance. Notre équipe va examiner ce logement.");
-            } catch (error) {
-              console.error("Erreur signalement :", error);
-              Alert.alert("Erreur", "Impossible d'envoyer le signalement.");
-            }
+  const handleOpenReportModal = () => {
+    if (!auth.currentUser) {
+      Alert.alert(
+        "Connexion requise",
+        "Vous devez être connecté avec votre compte étudiant pour signaler un logement.",
+        [
+          { text: "Se connecter", onPress: () => navigation.navigate('Login') },
+          { text: "Annuler", style: "cancel" }
+        ]
+      );
+      return;
+    }
+    setReportModalVisible(true);
+  };
+
+  const handleSubmitReport = async () => {
+    if (!auth.currentUser) return;
+
+    setSubmittingReport(true);
+    try {
+      const currentUserId = auth.currentUser.uid;
+      const proprietaireId = property.proprietaireId || property.userId || property.bailleurId || null;
+
+      // 1. Récupérer les informations complètes du bailleur
+      let bailleurInfo = {
+        id: proprietaireId || 'Inconnu',
+        nom: 'Propriétaire',
+        telephone: property.telephone || 'Non renseigné',
+        email: 'Non renseigné',
+        statutValidation: 'non_verifie',
+      };
+
+      if (proprietaireId) {
+        try {
+          const bSnap = await getDoc(doc(db, "users", proprietaireId));
+          if (bSnap.exists()) {
+            const bData = bSnap.data();
+            bailleurInfo = {
+              id: proprietaireId,
+              nom: bData.nomComplet || (bData.prenom ? `${bData.prenom} ${bData.nom || ''}`.trim() : bData.displayName) || 'Propriétaire',
+              telephone: bData.telephone || property.telephone || 'Non renseigné',
+              email: bData.email || 'Non renseigné',
+              statutValidation: bData.statutValidation || 'non_verifie',
+            };
           }
+        } catch (e) {
+          console.log("Erreur récupération bailleur :", e);
         }
-      ]
-    );
+      }
+
+      // 2. Récupérer les informations de l'étudiant qui signale
+      let reporterInfo = {
+        uid: currentUserId,
+        nom: 'Étudiant',
+        telephone: 'Non renseigné',
+        email: auth.currentUser.email || 'Non renseigné',
+      };
+
+      try {
+        const uSnap = await getDoc(doc(db, "users", currentUserId));
+        if (uSnap.exists()) {
+          const uData = uSnap.data();
+          reporterInfo = {
+            uid: currentUserId,
+            nom: uData.nomComplet || (uData.prenom ? `${uData.prenom} ${uData.nom || ''}`.trim() : uData.displayName) || 'Étudiant',
+            telephone: uData.telephone || 'Non renseigné',
+            email: uData.email || auth.currentUser.email || 'Non renseigné',
+          };
+        }
+      } catch (e) {
+        console.log("Erreur récupération étudiant :", e);
+      }
+
+      // 3. Enregistrer le signalement complet dans Firestore
+      await addDoc(collection(db, "reports"), {
+        // Motif et détails
+        motif: selectedMotif,
+        description: reportDetails.trim() || 'Aucune précision écrite fournie.',
+        
+        // Logement concerné
+        propertyId: property.id,
+        propertyTitle: property.titre || 'Logement',
+        propertyPrice: property.prix ? String(property.prix) : 'Non précisé',
+        propertyUniversite: property.universiteId || 'Non précisée',
+        propertyAdresse: property.adresse || 'Non précisée',
+        propertyImage: (property.images && property.images[0]) || property.image || null,
+
+        // Informations profil Bailleur
+        bailleurId: bailleurInfo.id,
+        bailleurNom: bailleurInfo.nom,
+        bailleurTelephone: bailleurInfo.telephone,
+        bailleurEmail: bailleurInfo.email,
+        bailleurStatut: bailleurInfo.statutValidation,
+
+        // Informations Étudiant signalant
+        reportedBy: currentUserId,
+        reporterNom: reporterInfo.nom,
+        reporterTelephone: reporterInfo.telephone,
+        reporterEmail: reporterInfo.email,
+
+        // Statut & dates
+        status: "en_attente",
+        date: new Date(),
+        createdAt: serverTimestamp(),
+      });
+
+      setReportModalVisible(false);
+      setReportDetails('');
+      Alert.alert(
+        "Signalement transmis avec succès 🛡️",
+        "Merci pour votre vigilance citoyenne. L'équipe d'administration de Logetudiant a reçu les informations complètes sur ce profil bailleur et va intervenir sans délai."
+      );
+    } catch (error) {
+      console.error("Erreur enregistrement signalement :", error);
+      Alert.alert("Erreur", "Une erreur technique est survenue lors de l'envoi du signalement.");
+    } finally {
+      setSubmittingReport(false);
+    }
   };
 
   const handleContactProprietaire = (telephone, titreBien) => {
@@ -490,7 +599,7 @@ export default function PropertyDetailsScreen({ route, navigation }) {
         {/* BOUTON SIGNALEMENT ARNAQUE */}
         <TouchableOpacity 
           style={styles.reportButton}
-          onPress={handleReportProperty}
+          onPress={handleOpenReportModal}
           activeOpacity={0.8}
         >
           <Ionicons name="shield-outline" size={16} color="#DC2626" style={{ marginRight: 6 }} />
@@ -499,6 +608,115 @@ export default function PropertyDetailsScreen({ route, navigation }) {
 
         <View style={{ height: 40 }} />
       </ScrollView>
+
+      {/* MODALE DE SIGNALEMENT AVEC MOTIF ET DÉTAILS COMPLETS */}
+      <Modal
+        visible={reportModalVisible}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setReportModalVisible(false)}
+      >
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={styles.modalOverlay}
+        >
+          <TouchableOpacity
+            style={styles.modalBackdropDismiss}
+            activeOpacity={1}
+            onPress={Keyboard.dismiss}
+          />
+          <View style={styles.modalCard}>
+            <View style={styles.modalBar} />
+
+            <View style={styles.modalHeaderRow}>
+              <View style={styles.modalIconBox}>
+                <Ionicons name="shield-alert" size={24} color="#DC2626" />
+              </View>
+              <View style={{ flex: 1, marginLeft: 10 }}>
+                <Text style={styles.modalTitle}>Signaler cette annonce</Text>
+                <Text style={styles.modalSubtitle}>Aidez-nous à protéger les étudiants</Text>
+              </View>
+              <TouchableOpacity
+                onPress={() => setReportModalVisible(false)}
+                style={styles.modalCloseBtn}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              >
+                <Ionicons name="close" size={20} color="#64748B" />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+              <Text style={styles.sectionLabel}>Quel est le motif du signalement ?</Text>
+              
+              {MOTIFS_SIGNALEMENT.map((m) => {
+                const isSelected = selectedMotif === m.label;
+                return (
+                  <TouchableOpacity
+                    key={m.id}
+                    style={[styles.motifOption, isSelected && styles.motifOptionSelected]}
+                    onPress={() => setSelectedMotif(m.label)}
+                    activeOpacity={0.8}
+                  >
+                    <Ionicons
+                      name={isSelected ? "radio-button-on" : "radio-button-off"}
+                      size={18}
+                      color={isSelected ? "#DC2626" : "#94A3B8"}
+                      style={{ marginRight: 8 }}
+                    />
+                    <Text style={[styles.motifText, isSelected && styles.motifTextSelected]}>
+                      {m.label}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+
+              <Text style={[styles.sectionLabel, { marginTop: 14 }]}>
+                Précisions supplémentaires (facultatif) :
+              </Text>
+              <TextInput
+                style={styles.reportTextInput}
+                placeholder="Ex : Le bailleur m'a demandé 40.000 FCFA sur Wave avant de visiter, ou le numéro n'appartient pas au propriétaire..."
+                placeholderTextColor="#94A3B8"
+                value={reportDetails}
+                onChangeText={setReportDetails}
+                multiline
+                numberOfLines={3}
+                maxLength={400}
+              />
+
+              <View style={styles.adminNoticeBox}>
+                <Ionicons name="information-circle-outline" size={16} color="#003880" style={{ marginRight: 6 }} />
+                <Text style={styles.adminNoticeText}>
+                  Les informations complètes du profil bailleur seront automatiquement transmises à l'administrateur Logetudiant.
+                </Text>
+              </View>
+
+              <TouchableOpacity
+                style={styles.submitReportBtn}
+                onPress={handleSubmitReport}
+                disabled={submittingReport}
+                activeOpacity={0.85}
+              >
+                {submittingReport ? (
+                  <ActivityIndicator color="#FFFFFF" />
+                ) : (
+                  <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                    <Ionicons name="shield-checkmark" size={18} color="#FFFFFF" style={{ marginRight: 6 }} />
+                    <Text style={styles.submitReportBtnText}>Envoyer le signalement</Text>
+                  </View>
+                )}
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.cancelReportBtn}
+                onPress={() => setReportModalVisible(false)}
+              >
+                <Text style={styles.cancelReportBtnText}>Annuler</Text>
+              </TouchableOpacity>
+            </ScrollView>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -810,5 +1028,155 @@ const styles = StyleSheet.create({
     color: '#DC2626',
     fontSize: 13,
     fontWeight: '700',
+  },
+
+  // STYLES MODALE DE SIGNALEMENT
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(15, 23, 42, 0.65)',
+    justifyContent: 'flex-end',
+  },
+  modalBackdropDismiss: {
+    flex: 1,
+    width: '100%',
+  },
+  modalCard: {
+    backgroundColor: '#FFFFFF',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    paddingHorizontal: 20,
+    paddingTop: 12,
+    paddingBottom: Platform.OS === 'ios' ? 36 : 24,
+    maxHeight: '90%',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  modalBar: {
+    width: 40,
+    height: 4,
+    backgroundColor: '#CBD5E1',
+    borderRadius: 2,
+    alignSelf: 'center',
+    marginBottom: 12,
+  },
+  modalHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F1F5F9',
+    paddingBottom: 10,
+  },
+  modalIconBox: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#FEF2F2',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalTitle: {
+    fontSize: 17,
+    fontWeight: '800',
+    color: '#0F172A',
+  },
+  modalSubtitle: {
+    fontSize: 12,
+    color: '#64748B',
+    marginTop: 2,
+  },
+  modalCloseBtn: {
+    padding: 6,
+    borderRadius: 16,
+    backgroundColor: '#F1F5F9',
+  },
+  sectionLabel: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#334155',
+    marginBottom: 8,
+  },
+  motifOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    marginBottom: 7,
+  },
+  motifOptionSelected: {
+    backgroundColor: '#FEF2F2',
+    borderColor: '#FCA5A5',
+  },
+  motifText: {
+    fontSize: 13,
+    color: '#475569',
+    flex: 1,
+    fontWeight: '500',
+  },
+  motifTextSelected: {
+    color: '#991B1B',
+    fontWeight: '700',
+  },
+  reportTextInput: {
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    borderRadius: 10,
+    padding: 12,
+    fontSize: 13,
+    color: '#1E293B',
+    textAlignVertical: 'top',
+    minHeight: 70,
+  },
+  adminNoticeBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#EFF6FF',
+    borderWidth: 1,
+    borderColor: '#BFDBFE',
+    borderRadius: 10,
+    padding: 10,
+    marginTop: 12,
+    marginBottom: 14,
+  },
+  adminNoticeText: {
+    fontSize: 11,
+    color: '#1E40AF',
+    flex: 1,
+    lineHeight: 16,
+  },
+  submitReportBtn: {
+    backgroundColor: '#DC2626',
+    borderRadius: 12,
+    paddingVertical: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#DC2626',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  submitReportBtnText: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  cancelReportBtn: {
+    paddingVertical: 10,
+    alignItems: 'center',
+    marginTop: 4,
+  },
+  cancelReportBtnText: {
+    color: '#64748B',
+    fontSize: 13,
+    fontWeight: '600',
   },
 });

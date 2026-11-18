@@ -12,7 +12,9 @@ import {
   ScrollView,
   SafeAreaView,
   Platform,
-  StatusBar
+  StatusBar,
+  KeyboardAvoidingView,
+  Keyboard
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { db } from '../config/firebase';
@@ -368,8 +370,12 @@ export default function AdminUsersScreen({ navigation }) {
       />
 
       {/* MODAL POUR ÉDITER LE PROFIL D'UN UTILISATEUR */}
-      <Modal visible={!!editingUser} transparent animationType="fade">
-        <View style={styles.modalBackdrop}>
+      <Modal visible={!!editingUser} transparent animationType="fade" onRequestClose={() => setEditingUser(null)}>
+        <KeyboardAvoidingView 
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'} 
+          style={styles.modalBackdrop}
+          keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
+        >
           <View style={styles.modalCard}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>Modifier l'utilisateur</Text>
@@ -378,7 +384,7 @@ export default function AdminUsersScreen({ navigation }) {
               </TouchableOpacity>
             </View>
 
-            <ScrollView showsVerticalScrollIndicator={false}>
+            <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
               <Text style={styles.modalLabel}>Nom complet (Prénom et Nom)</Text>
               <TextInput 
                 style={styles.modalInput}
@@ -428,7 +434,7 @@ export default function AdminUsersScreen({ navigation }) {
               </TouchableOpacity>
             </ScrollView>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
       </View>
     </SafeAreaView>

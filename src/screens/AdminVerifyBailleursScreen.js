@@ -20,6 +20,7 @@ import { db } from '../config/firebase';
 import { collection, query, where, getDocs, updateDoc, doc } from 'firebase/firestore';
 import { formatCleanFullName } from '../utils/nameFormatter';
 import { sendRealSms } from '../services/smsService';
+import { sendAppNotification } from '../services/notificationService';
 
 export default function AdminVerifyBailleursScreen({ navigation }) {
   const [bailleurs, setBailleurs] = useState([]);
@@ -77,6 +78,17 @@ export default function AdminVerifyBailleursScreen({ navigation }) {
                   nouveauStatut === 'valide' ? 'bailleur_valide' : 'bailleur_rejete'
                 ).catch(() => {});
               }
+
+              // Envoyer notification Push & Cloche dans l'application
+              sendAppNotification({
+                userId: userId,
+                title: nouveauStatut === 'valide' ? 'Compte Bailleur Certifié 🎉' : 'Dossier Bailleur Non Validé',
+                body: nouveauStatut === 'valide' 
+                  ? 'Félicitations ! Votre profil bailleur a été certifié. Vous pouvez publier vos logements.' 
+                  : 'Votre demande de compte bailleur n\'a pas été validée. Veuillez vérifier vos pièces sur votre profil.',
+                type: 'bailleur_status',
+                data: { statut: nouveauStatut }
+              }).catch(() => {});
 
               Alert.alert("Succès ✨", `Le compte bailleur est désormais : ${nouveauStatut.toUpperCase()}`);
               fetchBailleurs();

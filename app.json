@@ -28,6 +28,7 @@
       },
       "package": "com.capico.logeetudiant",
       "versionCode": 1,
+      "softwareKeyboardLayoutMode": "resize",
       "permissions": [
         "INTERNET",
         "ACCESS_FINE_LOCATION",
@@ -63,11 +64,10 @@
       ],
       "expo-font",
       [
-        "expo-splash-screen",
+        "expo-notifications",
         {
-          "image": "./assets/logo.png",
-          "resizeMode": "contain",
-          "backgroundColor": "#ffffff"
+          "icon": "./assets/icon-square.png",
+          "color": "#003880"
         }
       ]
     ],

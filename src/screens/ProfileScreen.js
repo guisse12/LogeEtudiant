@@ -8,7 +8,10 @@ import {
   Alert, 
   ActivityIndicator, 
   ScrollView,
-  Modal
+  Modal,
+  KeyboardAvoidingView,
+  Platform,
+  Keyboard
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { doc, getDoc, updateDoc } from 'firebase/firestore';
@@ -443,82 +446,104 @@ export default function ProfileScreen({ navigation }) {
       </TouchableOpacity>
 
       {/* MODALE DE MODIFICATION DU MOT DE PASSE SANS AUCUN EMAIL */}
-      <Modal visible={passwordModalVisible} animationType="slide" transparent={true}>
-        <View style={styles.modalOverlay}>
+      <Modal 
+        visible={passwordModalVisible} 
+        animationType="slide" 
+        transparent={true}
+        onRequestClose={() => setPasswordModalVisible(false)}
+      >
+        <KeyboardAvoidingView 
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'} 
+          style={styles.modalOverlay}
+          keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
+        >
+          <TouchableOpacity 
+            style={styles.modalBackdropDismiss} 
+            activeOpacity={1} 
+            onPress={Keyboard.dismiss} 
+          />
           <View style={styles.modalCard}>
-            <View style={styles.modalBar} />
+            <ScrollView 
+              showsVerticalScrollIndicator={false} 
+              keyboardShouldPersistTaps="handled" 
+              bounces={false}
+              contentContainerStyle={{ paddingBottom: 16 }}
+            >
+              <View style={styles.modalBar} />
 
-            <View style={styles.modalHeaderRow}>
-              <View style={styles.modalIconBox}>
-                <Ionicons name="lock-closed" size={22} color="#003880" />
+              <View style={styles.modalHeaderRow}>
+                <View style={styles.modalIconBox}>
+                  <Ionicons name="lock-closed" size={22} color="#003880" />
+                </View>
+                <TouchableOpacity 
+                  style={styles.modalCloseBtn} 
+                  onPress={() => setPasswordModalVisible(false)}
+                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                >
+                  <Ionicons name="close" size={20} color="#64748B" />
+                </TouchableOpacity>
               </View>
+
+              <Text style={styles.modalTitle}>Modifier mon mot de passe</Text>
+              <Text style={styles.modalDesc}>
+                Saisissez votre nouveau mot de passe à <Text style={{ fontWeight: 'bold' }}>6 chiffres</Text> pour sécuriser votre compte.
+              </Text>
+
+              {/* CHAMP NOUVEAU MOT DE PASSE */}
+              <View style={[styles.modalInputContainer, { marginTop: 14 }]}>
+                <Ionicons name="key-outline" size={19} color="#003880" style={{ marginRight: 8 }} />
+                <TextInput 
+                  style={styles.modalInputField}
+                  placeholder="Nouveau mot de passe (6 chiffres)"
+                  placeholderTextColor="#94A3B8"
+                  value={newPass}
+                  onChangeText={setNewPass}
+                  secureTextEntry={!showPass}
+                  keyboardType="numeric"
+                  maxLength={6}
+                />
+                <TouchableOpacity onPress={() => setShowPass(!showPass)}>
+                  <Ionicons name={showPass ? "eye-off-outline" : "eye-outline"} size={20} color="#64748B" />
+                </TouchableOpacity>
+              </View>
+
+              {/* CHAMP CONFIRMATION */}
+              <View style={[styles.modalInputContainer, { marginTop: 10 }]}>
+                <Ionicons name="shield-checkmark-outline" size={19} color="#003880" style={{ marginRight: 8 }} />
+                <TextInput 
+                  style={styles.modalInputField}
+                  placeholder="Confirmer les 6 chiffres"
+                  placeholderTextColor="#94A3B8"
+                  value={confirmPass}
+                  onChangeText={setConfirmPass}
+                  secureTextEntry={!showPass}
+                  keyboardType="numeric"
+                  maxLength={6}
+                />
+              </View>
+
               <TouchableOpacity 
-                style={styles.modalCloseBtn} 
+                style={styles.modalActionBtn}
+                onPress={handleSaveDirectPassword}
+                disabled={savingPass}
+                activeOpacity={0.85}
+              >
+                {savingPass ? (
+                  <ActivityIndicator color="#fff" />
+                ) : (
+                  <Text style={styles.modalActionBtnText}>Valider mon nouveau mot de passe</Text>
+                )}
+              </TouchableOpacity>
+
+              <TouchableOpacity 
+                style={styles.modalCancelBtn}
                 onPress={() => setPasswordModalVisible(false)}
               >
-                <Ionicons name="close" size={20} color="#64748B" />
+                <Text style={styles.modalCancelBtnText}>Annuler</Text>
               </TouchableOpacity>
-            </View>
-
-            <Text style={styles.modalTitle}>Modifier mon mot de passe</Text>
-            <Text style={styles.modalDesc}>
-              Saisissez votre nouveau mot de passe à <Text style={{ fontWeight: 'bold' }}>6 chiffres</Text> pour sécuriser votre compte.
-            </Text>
-
-            {/* CHAMP NOUVEAU MOT DE PASSE */}
-            <View style={[styles.modalInputContainer, { marginTop: 14 }]}>
-              <Ionicons name="key-outline" size={19} color="#003880" style={{ marginRight: 8 }} />
-              <TextInput 
-                style={styles.modalInputField}
-                placeholder="Nouveau mot de passe (6 chiffres)"
-                placeholderTextColor="#94A3B8"
-                value={newPass}
-                onChangeText={setNewPass}
-                secureTextEntry={!showPass}
-                keyboardType="numeric"
-                maxLength={6}
-              />
-              <TouchableOpacity onPress={() => setShowPass(!showPass)}>
-                <Ionicons name={showPass ? "eye-off-outline" : "eye-outline"} size={20} color="#64748B" />
-              </TouchableOpacity>
-            </View>
-
-            {/* CHAMP CONFIRMATION */}
-            <View style={[styles.modalInputContainer, { marginTop: 10 }]}>
-              <Ionicons name="shield-checkmark-outline" size={19} color="#003880" style={{ marginRight: 8 }} />
-              <TextInput 
-                style={styles.modalInputField}
-                placeholder="Confirmer les 6 chiffres"
-                placeholderTextColor="#94A3B8"
-                value={confirmPass}
-                onChangeText={setConfirmPass}
-                secureTextEntry={!showPass}
-                keyboardType="numeric"
-                maxLength={6}
-              />
-            </View>
-
-            <TouchableOpacity 
-              style={styles.modalActionBtn}
-              onPress={handleSaveDirectPassword}
-              disabled={savingPass}
-              activeOpacity={0.85}
-            >
-              {savingPass ? (
-                <ActivityIndicator color="#fff" />
-              ) : (
-                <Text style={styles.modalActionBtnText}>Valider mon nouveau mot de passe</Text>
-              )}
-            </TouchableOpacity>
-
-            <TouchableOpacity 
-              style={styles.modalCancelBtn}
-              onPress={() => setPasswordModalVisible(false)}
-            >
-              <Text style={styles.modalCancelBtnText}>Annuler</Text>
-            </TouchableOpacity>
+            </ScrollView>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
     </ScrollView>
   );
@@ -725,12 +750,18 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(15, 23, 42, 0.65)',
     justifyContent: 'flex-end',
   },
+  modalBackdropDismiss: {
+    flex: 1,
+    width: '100%',
+  },
   modalCard: {
     backgroundColor: '#FFFFFF',
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
-    padding: 24,
-    paddingBottom: 36,
+    paddingHorizontal: 22,
+    paddingTop: 16,
+    paddingBottom: Platform.OS === 'ios' ? 40 : 24,
+    maxHeight: '90%',
   },
   modalBar: {
     width: 44,

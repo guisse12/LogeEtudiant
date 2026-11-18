@@ -18,6 +18,7 @@ import { collection, addDoc, doc, getDoc, updateDoc, serverTimestamp } from 'fir
 import { db, auth } from '../config/firebase';
 import { formatCleanFullName } from '../utils/nameFormatter';
 import { UNIVERSITES } from '../services/universityService';
+import { broadcastNotification } from '../services/notificationService';
 
 export default function AjouterColocAnnonceScreen({ navigation, route }) {
   const annonceToEdit = route?.params?.annonceToEdit;
@@ -119,6 +120,14 @@ export default function AjouterColocAnnonceScreen({ navigation, route }) {
           createdAt: serverTimestamp(),
         });
 
+        // Notification automatique diffusée aux étudiants
+        broadcastNotification({
+          title: "Nouvelle recherche de colocation 👥",
+          body: `${userName} cherche un colocataire (${universiteId}) - Budget max : ${budgetNum} FCFA.`,
+          type: 'new_coloc',
+          data: { universiteId }
+        }).catch(() => {});
+
         Alert.alert("Succès", "Votre annonce de colocation a été publiée avec succès !");
         navigation.goBack();
       }
@@ -148,10 +157,16 @@ export default function AjouterColocAnnonceScreen({ navigation, route }) {
       </View>
 
       <KeyboardAvoidingView 
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined} 
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'} 
         style={{ flex: 1 }}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
       >
-        <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
+        <ScrollView 
+          contentContainerStyle={styles.container} 
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
+        >
           <Text style={styles.title}>{isEditing ? "Modifier mon annonce" : "Publier une recherche"}</Text>
           <Text style={styles.subtitle}>
             {isEditing ? "Mettez à jour vos critères pour trouver le colocataire idéal" : "Trouvez un camarade pour partager votre futur logement"}
@@ -260,7 +275,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#0F172A',
   },
-  container: { padding: 18, backgroundColor: '#F8FAFC', flexGrow: 1 },
+  container: { padding: 18, backgroundColor: '#F8FAFC', flexGrow: 1, paddingBottom: 60 },
   title: { fontSize: 22, fontWeight: '800', color: '#0F172A', marginBottom: 4 },
   subtitle: { fontSize: 13, color: '#64748B', marginBottom: 20 },
   label: { fontSize: 13, fontWeight: '700', color: '#334155', marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.4 },

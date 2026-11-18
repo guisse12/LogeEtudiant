@@ -13,7 +13,9 @@ import {
   Platform, 
   ScrollView,
   Animated,
-  SafeAreaView
+  SafeAreaView,
+  Keyboard,
+  TouchableWithoutFeedback
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { 
@@ -30,6 +32,20 @@ export default function LoginScreen({ navigation, route }) {
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
+  const scrollViewRef = useRef(null);
+
+  // Détecter l'ouverture/fermeture du clavier pour adapter dynamiquement la vue
+  useEffect(() => {
+    const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+    const showSub = Keyboard.addListener(showEvent, () => setIsKeyboardVisible(true));
+    const hideSub = Keyboard.addListener(hideEvent, () => setIsKeyboardVisible(false));
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, []);
 
   useEffect(() => {
     if (route?.params?.prefilledPhone) {
@@ -44,11 +60,21 @@ export default function LoginScreen({ navigation, route }) {
   const [forgotCode, setForgotCode] = useState('');
   const [expectedForgotCode, setExpectedForgotCode] = useState('');
   const [forgotDemoCode, setForgotDemoCode] = useState(null);
-  const [forgotCountdown, setForgotCountdown] = useState(30);
+  const [forgotCountdown, setForgotCountdown] = useState(300); // 5 minutes
   const [newPassword, setNewPassword] = useState('');
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [forgotLoading, setForgotLoading] = useState(false);
   const forgotOtpRef = useRef(null);
+
+  // Formatter pour le compte à rebours (ex: 4m 59s ou 45s)
+  const formatCountdown = (seconds) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    if (mins > 0) {
+      return `${mins}m ${secs < 10 ? '0' : ''}${secs}s`;
+    }
+    return `${secs}s`;
+  };
 
   // Compte à rebours automatique
   useEffect(() => {
@@ -177,7 +203,7 @@ export default function LoginScreen({ navigation, route }) {
       if (res.success) {
         setExpectedForgotCode(res.code);
         setForgotDemoCode(!res.delivered ? res.code : null);
-        setForgotCountdown(30);
+        setForgotCountdown(300); // 5 minutes
         setForgotCode('');
         setForgotStep(2);
         setTimeout(() => forgotOtpRef.current?.focus(), 350);
@@ -204,7 +230,7 @@ export default function LoginScreen({ navigation, route }) {
       if (res.success) {
         setExpectedForgotCode(res.code);
         setForgotDemoCode(!res.delivered ? res.code : null);
-        setForgotCountdown(30);
+        setForgotCountdown(300); // 5 minutes
       }
     } catch (e) {
       Alert.alert('Erreur', 'Impossible de renvoyer le code.');
@@ -266,96 +292,117 @@ export default function LoginScreen({ navigation, route }) {
 
   return (
     <KeyboardAvoidingView 
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined} 
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'} 
       style={{ flex: 1 }}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
     >
-      <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
-        
-        {/* LOGO PARFAITEMENT DÉTOURÉ & AGRANDI EN HAUTE DÉFINITION */}
-        <View style={styles.logoWrapper}>
-          <Image 
-            source={require('../../assets/logo.png')} 
-            style={styles.logo} 
-            resizeMode="contain" 
-          />
-        </View>
-
-        <Text style={styles.title}>Connexion</Text>
-        <Text style={styles.subtitle}>Bienvenue sur Logetudiant Sénégal</Text>
-
-        {/* CHAMP NUMÉRO DE TÉLÉPHONE (9 CHIFFRES) */}
-        <View style={styles.inputContainer}>
-          <Ionicons name="call-outline" size={20} color="#003880" style={styles.inputIcon} />
-          <TextInput
-            style={styles.inputField}
-            placeholder="Numéro de téléphone"
-            placeholderTextColor="#94A3B8"
-            value={identifier}
-            onChangeText={setIdentifier}
-            keyboardType="numeric"
-            maxLength={9}
-          />
-        </View>
-
-        {/* CHAMP MOT DE PASSE AVEC ŒIL */}
-        <View style={styles.inputContainer}>
-          <Ionicons name="lock-closed-outline" size={20} color="#003880" style={styles.inputIcon} />
-          <TextInput
-            style={styles.inputField}
-            placeholder="Mot de passe (6 chiffres)"
-            placeholderTextColor="#94A3B8"
-            value={password}
-            onChangeText={setPassword}
-            secureTextEntry={!showPassword}
-            keyboardType="numeric"
-            maxLength={6}
-          />
-          <TouchableOpacity 
-            onPress={() => setShowPassword(!showPassword)} 
-            style={styles.eyeIcon}
-            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-          >
-            <Ionicons 
-              name={showPassword ? "eye-off-outline" : "eye-outline"} 
-              size={22} 
-              color="#64748B" 
+      <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
+        <ScrollView 
+          ref={scrollViewRef}
+          contentContainerStyle={[
+            styles.container,
+            isKeyboardVisible && styles.containerKeyboardOpen
+          ]} 
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
+        >
+          {/* LOGO PARFAITEMENT DÉTOURÉ & ADAPTÉ AU CLAVIER */}
+          <View style={[styles.logoWrapper, isKeyboardVisible && styles.logoWrapperCompact]}>
+            <Image 
+              source={require('../../assets/logo.png')} 
+              style={[styles.logo, isKeyboardVisible && styles.logoCompact]} 
+              resizeMode="contain" 
             />
-          </TouchableOpacity>
-        </View>
+          </View>
 
-        {/* LIEN MOT DE PASSE OUBLIÉ */}
-        <TouchableOpacity 
-          onPress={openForgotModal} 
-          style={styles.forgotPasswordContainer}
-        >
-          <Text style={styles.forgotPasswordText}>Mot de passe oublié ?</Text>
-        </TouchableOpacity>
+          <Text style={[styles.title, isKeyboardVisible && styles.titleCompact]}>Connexion</Text>
+          <Text style={[styles.subtitle, isKeyboardVisible && styles.subtitleCompact]}>Bienvenue sur Logetudiant Sénégal</Text>
 
-        {/* BOUTON SE CONNECTER (BLEU ROYAL HARMONISÉ) */}
-        <TouchableOpacity 
-          style={styles.button} 
-          onPress={handleLogin} 
-          disabled={loading}
-          activeOpacity={0.85}
-        >
-          {loading ? (
-            <ActivityIndicator color="#fff" />
-          ) : (
-            <View style={styles.buttonContent}>
-              <Text style={styles.buttonText}>Se connecter</Text>
-              <Ionicons name="arrow-forward" size={18} color="#fff" style={{ marginLeft: 6 }} />
-            </View>
-          )}
-        </TouchableOpacity>
-        
-        {/* LIEN VERS L'INSCRIPTION */}
-        <View style={styles.registerLinkRow}>
-          <Text style={styles.registerPromptText}>Pas encore de compte ? </Text>
-          <TouchableOpacity onPress={() => navigation.navigate('Register')}>
-            <Text style={styles.registerLinkText}>S'inscrire</Text>
+          {/* CHAMP NUMÉRO DE TÉLÉPHONE (9 CHIFFRES) */}
+          <View style={styles.inputContainer}>
+            <Ionicons name="call-outline" size={20} color="#003880" style={styles.inputIcon} />
+            <TextInput
+              style={styles.inputField}
+              placeholder="Numéro de téléphone"
+              placeholderTextColor="#94A3B8"
+              value={identifier}
+              onChangeText={setIdentifier}
+              keyboardType="numeric"
+              maxLength={9}
+              onFocus={() => {
+                setTimeout(() => {
+                  scrollViewRef.current?.scrollTo({ y: 0, animated: true });
+                }, 100);
+              }}
+            />
+          </View>
+
+          {/* CHAMP MOT DE PASSE AVEC ŒIL */}
+          <View style={styles.inputContainer}>
+            <Ionicons name="lock-closed-outline" size={20} color="#003880" style={styles.inputIcon} />
+            <TextInput
+              style={styles.inputField}
+              placeholder="Mot de passe (6 chiffres)"
+              placeholderTextColor="#94A3B8"
+              value={password}
+              onChangeText={setPassword}
+              secureTextEntry={!showPassword}
+              keyboardType="numeric"
+              maxLength={6}
+              onFocus={() => {
+                setTimeout(() => {
+                  scrollViewRef.current?.scrollTo({ y: 70, animated: true });
+                }, 120);
+              }}
+            />
+            <TouchableOpacity 
+              onPress={() => setShowPassword(!showPassword)} 
+              style={styles.eyeIcon}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            >
+              <Ionicons 
+                name={showPassword ? "eye-off-outline" : "eye-outline"} 
+                size={22} 
+                color="#64748B" 
+              />
+            </TouchableOpacity>
+          </View>
+
+          {/* LIEN MOT DE PASSE OUBLIÉ */}
+          <TouchableOpacity 
+            onPress={openForgotModal} 
+            style={styles.forgotPasswordContainer}
+          >
+            <Text style={styles.forgotPasswordText}>Mot de passe oublié ?</Text>
           </TouchableOpacity>
-        </View>
-      </ScrollView>
+
+          {/* BOUTON SE CONNECTER (BLEU ROYAL HARMONISÉ) */}
+          <TouchableOpacity 
+            style={styles.button} 
+            onPress={handleLogin} 
+            disabled={loading}
+            activeOpacity={0.85}
+          >
+            {loading ? (
+              <ActivityIndicator color="#fff" />
+            ) : (
+              <View style={styles.buttonContent}>
+                <Text style={styles.buttonText}>Se connecter</Text>
+                <Ionicons name="arrow-forward" size={18} color="#fff" style={{ marginLeft: 6 }} />
+              </View>
+            )}
+          </TouchableOpacity>
+          
+          {/* LIEN VERS L'INSCRIPTION */}
+          <View style={styles.registerLinkRow}>
+            <Text style={styles.registerPromptText}>Pas encore de compte ? </Text>
+            <TouchableOpacity onPress={() => navigation.navigate('Register')}>
+              <Text style={styles.registerLinkText}>S'inscrire</Text>
+            </TouchableOpacity>
+          </View>
+        </ScrollView>
+      </TouchableWithoutFeedback>
 
       {/* MODALE RÉCUPÉRATION DE MOT DE PASSE ULTRA-PROFESSIONNELLE */}
       <Modal 
@@ -365,11 +412,23 @@ export default function LoginScreen({ navigation, route }) {
         onRequestClose={() => setForgotModalVisible(false)}
       >
         <KeyboardAvoidingView 
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined} 
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'} 
           style={styles.modalOverlay}
+          keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
         >
-          <View style={styles.modalCard}>
-            <View style={styles.modalBar} />
+          <TouchableOpacity 
+            style={styles.modalBackdropDismiss} 
+            activeOpacity={1} 
+            onPress={Keyboard.dismiss} 
+          />
+          <View style={[styles.modalCard, isKeyboardVisible && styles.modalCardWithKeyboard]}>
+            <ScrollView 
+              showsVerticalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
+              contentContainerStyle={{ paddingBottom: isKeyboardVisible ? 36 : 10 }}
+              bounces={false}
+            >
+              <View style={styles.modalBar} />
             
             <View style={styles.modalTopRow}>
               <View style={styles.modalBadgeCircle}>
@@ -446,11 +505,7 @@ export default function LoginScreen({ navigation, route }) {
                 </Text>
 
                 {/* 6 CELLULES DU CODE PIN OTP ULTRA-PROFESSIONNEL */}
-                <TouchableOpacity 
-                  style={styles.otpContainer} 
-                  activeOpacity={1} 
-                  onPress={() => forgotOtpRef.current?.focus()}
-                >
+                <View style={styles.otpContainer}>
                   <TextInput
                     ref={forgotOtpRef}
                     value={forgotCode}
@@ -462,25 +517,28 @@ export default function LoginScreen({ navigation, route }) {
                     maxLength={6}
                     style={styles.hiddenInput}
                     autoFocus={true}
+                    caretHidden={true}
                   />
-                  {[0, 1, 2, 3, 4, 5].map((i) => {
-                    const char = forgotCode[i] || '';
-                    const isCurrent = forgotCode.length === i;
-                    const isFilled = char !== '';
-                    return (
-                      <View 
-                        key={i} 
-                        style={[
-                          styles.otpCell,
-                          isCurrent && styles.otpCellActive,
-                          isFilled && styles.otpCellFilled
-                        ]}
-                      >
-                        <Text style={styles.otpCellText}>{char}</Text>
-                      </View>
-                    );
-                  })}
-                </TouchableOpacity>
+                  <View style={styles.otpCellsRow} pointerEvents="none">
+                    {[0, 1, 2, 3, 4, 5].map((i) => {
+                      const char = forgotCode[i] || '';
+                      const isCurrent = forgotCode.length === i;
+                      const isFilled = char !== '';
+                      return (
+                        <View 
+                          key={i} 
+                          style={[
+                            styles.otpCell,
+                            isCurrent && styles.otpCellActive,
+                            isFilled && styles.otpCellFilled
+                          ]}
+                        >
+                          <Text style={styles.otpCellText}>{char}</Text>
+                        </View>
+                      );
+                    })}
+                  </View>
+                </View>
 
                 {/* BADGE CODE DÉMO DISCRET EN MODE ATTENTE PASSERELLE */}
                 {forgotDemoCode ? (
@@ -500,7 +558,7 @@ export default function LoginScreen({ navigation, route }) {
                 <View style={styles.resendRow}>
                   {forgotCountdown > 0 ? (
                     <Text style={styles.countdownText}>
-                      Renvoyer le code dans <Text style={styles.countdownNumber}>{forgotCountdown}s</Text>
+                      Renvoyer le code dans <Text style={styles.countdownNumber}>{formatCountdown(forgotCountdown)}</Text>
                     </Text>
                   ) : (
                     <TouchableOpacity 
@@ -567,6 +625,7 @@ export default function LoginScreen({ navigation, route }) {
                 </TouchableOpacity>
               </>
             )}
+            </ScrollView>
           </View>
         </KeyboardAvoidingView>
       </Modal>
@@ -576,10 +635,17 @@ export default function LoginScreen({ navigation, route }) {
 
 const styles = StyleSheet.create({
   container: {
-    padding: 24,
+    paddingHorizontal: 24,
+    paddingTop: 24,
+    paddingBottom: 40,
     backgroundColor: '#F8FAFC',
     flexGrow: 1,
     justifyContent: 'center',
+  },
+  containerKeyboardOpen: {
+    justifyContent: 'flex-start',
+    paddingTop: 12,
+    paddingBottom: 220, // Espace généreux pour faire défiler bien au-dessus du clavier
   },
   logoWrapper: {
     alignItems: 'center',
@@ -587,9 +653,16 @@ const styles = StyleSheet.create({
     marginBottom: 20,
     backgroundColor: 'transparent',
   },
+  logoWrapperCompact: {
+    marginBottom: 8,
+  },
   logo: {
     width: 140,
     height: 120,
+  },
+  logoCompact: {
+    width: 70,
+    height: 55,
   },
   title: {
     fontSize: 26,
@@ -598,12 +671,19 @@ const styles = StyleSheet.create({
     marginBottom: 4,
     textAlign: 'center',
   },
+  titleCompact: {
+    fontSize: 22,
+    marginBottom: 2,
+  },
   subtitle: {
     fontSize: 13,
     color: '#E8A008', // Ocre doré officiel du logo
     fontWeight: '700',
     marginBottom: 24,
     textAlign: 'center',
+  },
+  subtitleCompact: {
+    marginBottom: 14,
   },
   inputContainer: {
     flexDirection: 'row',
@@ -686,6 +766,10 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(15, 23, 42, 0.65)',
     justifyContent: 'flex-end',
   },
+  modalBackdropDismiss: {
+    flex: 1,
+    width: '100%',
+  },
   modalCard: {
     backgroundColor: '#FFFFFF',
     borderTopLeftRadius: 28,
@@ -693,11 +777,15 @@ const styles = StyleSheet.create({
     paddingHorizontal: 22,
     paddingTop: 12,
     paddingBottom: Platform.OS === 'ios' ? 40 : 26,
+    maxHeight: '90%',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: -6 },
     shadowOpacity: 0.12,
     shadowRadius: 12,
     elevation: 12,
+  },
+  modalCardWithKeyboard: {
+    maxHeight: '85%',
   },
   modalBar: {
     width: 36,
@@ -752,17 +840,27 @@ const styles = StyleSheet.create({
 
   /* 6 Cellules OTP Pin */
   otpContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    position: 'relative',
+    height: 58,
+    justifyContent: 'center',
     marginVertical: 14,
     paddingHorizontal: 4,
   },
+  otpCellsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    width: '100%',
+  },
   hiddenInput: {
     position: 'absolute',
-    opacity: 0,
-    width: 1,
-    height: 1,
+    top: 0,
+    left: 0,
+    width: '100%',
+    height: 58,
+    opacity: 0.01,
+    zIndex: 10,
+    color: 'transparent',
   },
   otpCell: {
     width: 46,

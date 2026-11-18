@@ -22,6 +22,7 @@ import {
   updateDoc
 } from 'firebase/firestore';
 import { db, auth } from '../config/firebase';
+import { sendAppNotification } from '../services/notificationService';
 
 export default function ChatScreen({ route, navigation }) {
   const { conversationId: initialConvId, recipientId, recipientName, propertyId, propertyTitle } = route.params || {};
@@ -30,15 +31,37 @@ export default function ChatScreen({ route, navigation }) {
   const [inputText, setInputText] = useState('');
   const [conversationId, setConversationId] = useState(initialConvId);
   const [chatTitle, setChatTitle] = useState(recipientName || 'Discussion');
+  const [targetRecipientId, setTargetRecipientId] = useState(recipientId);
+  const [myDisplayName, setMyDisplayName] = useState(auth.currentUser?.displayName || 'Un utilisateur');
   const flatListRef = useRef(null);
 
   const currentUserId = auth.currentUser?.uid;
+
+  // Récupérer le nom de l'expéditeur pour les notifications
+  useEffect(() => {
+    const fetchMyName = async () => {
+      if (!currentUserId) return;
+      try {
+        const mySnap = await getDoc(doc(db, "users", currentUserId));
+        if (mySnap.exists()) {
+          const d = mySnap.data();
+          const name = d.nomComplet || (d.prenom ? `${d.prenom} ${d.nom || ''}`.trim() : d.displayName) || 'Un utilisateur';
+          setMyDisplayName(name);
+        }
+      } catch (e) {}
+    };
+    fetchMyName();
+  }, [currentUserId]);
 
   // 1. Gestion dynamique du titre de l'en-tête (Nom du destinataire)
   useEffect(() => {
     if (recipientName) {
       setChatTitle(recipientName);
       navigation.setOptions({ title: recipientName });
+    }
+
+    if (recipientId) {
+      setTargetRecipientId(recipientId);
       return;
     }
 
@@ -55,6 +78,7 @@ export default function ChatScreen({ route, navigation }) {
           const otherUserId = participants.find(id => id !== currentUserId);
 
           if (otherUserId) {
+            setTargetRecipientId(otherUserId);
             const userSnap = await getDoc(doc(db, "users", otherUserId));
             if (userSnap.exists()) {
               const userData = userSnap.data();
@@ -70,7 +94,7 @@ export default function ChatScreen({ route, navigation }) {
     };
 
     fetchOtherParticipantName();
-  }, [initialConvId, recipientName]);
+  }, [initialConvId, recipientName, recipientId, currentUserId]);
 
   // 2. Écouter les messages de la conversation en temps réel
   useEffect(() => {
@@ -134,6 +158,22 @@ export default function ChatScreen({ route, navigation }) {
         senderId: currentUserId,
         createdAt: serverTimestamp(),
       });
+
+      // Notification Push & Cloche au destinataire
+      const destId = targetRecipientId || recipientId;
+      if (destId && destId !== currentUserId) {
+        sendAppNotification({
+          userId: destId,
+          title: `Nouveau message de ${myDisplayName}`,
+          body: textToSend,
+          type: 'chat',
+          data: {
+            conversationId: activeConvId,
+            recipientId: currentUserId,
+            recipientName: myDisplayName,
+          },
+        }).catch((err) => console.log('[CHAT NOTIF] Erreur :', err));
+      }
 
     } catch (error) {
       console.error("Erreur lors de l'envoi du message :", error);

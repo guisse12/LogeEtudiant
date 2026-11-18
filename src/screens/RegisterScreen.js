@@ -12,7 +12,9 @@ import {
   KeyboardAvoidingView, 
   Platform,
   Modal,
-  Animated
+  Animated,
+  Keyboard,
+  TouchableWithoutFeedback
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
@@ -34,6 +36,20 @@ export default function RegisterScreen({ navigation, route }) {
   const [role, setRole] = useState('etudiant'); // 'etudiant' ou 'bailleur'
   const [justificatifsUris, setJustificatifsUris] = useState([]); // Jusqu'à 5 pièces
   const [loading, setLoading] = useState(false);
+  const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
+  const scrollViewRef = useRef(null);
+
+  // Détecter l'ouverture/fermeture du clavier pour adapter dynamiquement la vue
+  useEffect(() => {
+    const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+    const showSub = Keyboard.addListener(showEvent, () => setIsKeyboardVisible(true));
+    const hideSub = Keyboard.addListener(hideEvent, () => setIsKeyboardVisible(false));
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, []);
 
   useEffect(() => {
     if (route?.params?.prefilledPhone) {
@@ -319,183 +335,215 @@ export default function RegisterScreen({ navigation, route }) {
 
   return (
     <KeyboardAvoidingView 
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined} 
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'} 
       style={{ flex: 1 }}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
     >
-      <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
-        
-        {/* LOGO PARFAITEMENT DÉTOURÉ & AGRANDI EN HAUTE DÉFINITION */}
-        <View style={styles.logoWrapper}>
-          <Image 
-            source={require('../../assets/logo.png')} 
-            style={styles.logo} 
-            resizeMode="contain" 
-          />
-        </View>
-
-        <Text style={styles.title}>Créer un compte</Text>
-        <Text style={styles.subtitle}>Rejoignez la communauté Logetudiant Sénégal</Text>
-
-        {/* SÉLECTEUR DE RÔLE MODERNE */}
-        <View style={styles.roleContainer}>
-          <TouchableOpacity 
-            style={[styles.roleButton, role === 'etudiant' && styles.roleActive]}
-            onPress={() => setRole('etudiant')}
-            activeOpacity={0.8}
-          >
-            <Ionicons 
-              name="school-outline" 
-              size={18} 
-              color={role === 'etudiant' ? '#fff' : '#475569'} 
-              style={{ marginRight: 6 }} 
-            />
-            <Text style={[styles.roleText, role === 'etudiant' && styles.roleTextActive]}>Étudiant</Text>
-          </TouchableOpacity>
-          <TouchableOpacity 
-            style={[styles.roleButton, role === 'bailleur' && { backgroundColor: '#E8A008' }]}
-            onPress={() => setRole('bailleur')}
-            activeOpacity={0.8}
-          >
-            <Ionicons 
-              name="home-outline" 
-              size={18} 
-              color={role === 'bailleur' ? '#fff' : '#475569'} 
-              style={{ marginRight: 6 }} 
-            />
-            <Text style={[styles.roleText, role === 'bailleur' && styles.roleTextActive]}>Bailleur</Text>
-          </TouchableOpacity>
-        </View>
-
-        {/* CHAMP PRÉNOM */}
-        <View style={styles.inputContainer}>
-          <Ionicons name="person-outline" size={19} color="#003880" style={styles.inputIcon} />
-          <TextInput 
-            style={styles.inputField} 
-            placeholder="Prénom" 
-            placeholderTextColor="#94A3B8"
-            value={prenom} 
-            onChangeText={setPrenom}
-            maxLength={20}
-          />
-        </View>
-
-        {/* CHAMP NOM */}
-        <View style={styles.inputContainer}>
-          <Ionicons name="person-outline" size={19} color="#003880" style={styles.inputIcon} />
-          <TextInput 
-            style={styles.inputField} 
-            placeholder="Nom" 
-            placeholderTextColor="#94A3B8"
-            value={nom} 
-            onChangeText={setNom}
-            maxLength={15}
-          />
-        </View>
-
-        {/* CHAMP NUMÉRO DE TÉLÉPHONE (9 CHIFFRES UNIQUEMENT) */}
-        <View style={styles.inputContainer}>
-          <Ionicons name="call-outline" size={19} color="#003880" style={styles.inputIcon} />
-          <TextInput 
-            style={styles.inputField} 
-            placeholder="Numéro de téléphone" 
-            placeholderTextColor="#94A3B8"
-            value={telephone} 
-            onChangeText={setTelephone} 
-            keyboardType="numeric"
-            maxLength={9}
-          />
-        </View>
-
-        {/* CHAMP MOT DE PASSE (6 CHIFFRES AVEC ŒIL) */}
-        <View style={styles.passwordContainer}>
-          <Ionicons name="lock-closed-outline" size={19} color="#003880" style={styles.inputIcon} />
-          <TextInput 
-            style={styles.passwordInput} 
-            placeholder="Mot de passe (6 chiffres)" 
-            placeholderTextColor="#94A3B8"
-            value={password} 
-            onChangeText={setPassword} 
-            secureTextEntry={!showPassword}
-            keyboardType="numeric"
-            maxLength={6}
-          />
-          <TouchableOpacity 
-            onPress={() => setShowPassword(!showPassword)} 
-            style={styles.eyeIcon}
-            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-          >
-            <Ionicons 
-              name={showPassword ? "eye-off-outline" : "eye-outline"} 
-              size={22} 
-              color="#64748B" 
-            />
-          </TouchableOpacity>
-        </View>
-
-        {/* SECTION SPÉCIFIQUE BAILLEUR */}
-        {role === 'bailleur' && (
-          <View style={styles.bailleurCard}>
-            <View style={styles.bailleurHeader}>
-              <Ionicons name="shield-checkmark-outline" size={20} color="#003880" style={{ marginRight: 6 }} />
-              <Text style={styles.bailleurTitle}>Vérification du profil Bailleur</Text>
-            </View>
-            <Text style={styles.bailleurDesc}>
-              Fournissez au moins une pièce justificative (CNI, passeport, titre de propriété) pour authentifier votre identité.
-            </Text>
-            
-            <TouchableOpacity style={styles.filePickerBtn} onPress={handleAddJustificatif}>
-              <Ionicons name="cloud-upload-outline" size={18} color="#fff" style={{ marginRight: 6 }} />
-              <Text style={styles.filePickerText}>
-                Ajouter un document ({justificatifsUris.length}/5)
-              </Text>
-            </TouchableOpacity>
-
-            {/* Aperçu des pièces ajoutées */}
-            {justificatifsUris.length > 0 && (
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.previewScroll}>
-                {justificatifsUris.map((uri, index) => (
-                  <View key={index} style={styles.thumbContainer}>
-                    <Image source={{ uri }} style={styles.thumbImage} />
-                    <TouchableOpacity 
-                      style={styles.removeBtn} 
-                      onPress={() => handleRemoveJustificatif(index)}
-                    >
-                      <Ionicons name="close" size={14} color="#fff" />
-                    </TouchableOpacity>
-                  </View>
-                ))}
-              </ScrollView>
-            )}
-          </View>
-        )}
-
-        {/* BOUTON S'INSCRIRE AVEC CODE 6 CHIFFRES */}
-        <TouchableOpacity 
-          style={styles.submitBtn} 
-          onPress={handleInitiateRegister} 
-          disabled={loading}
-          activeOpacity={0.85}
+      <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
+        <ScrollView 
+          ref={scrollViewRef}
+          contentContainerStyle={[
+            styles.container,
+            isKeyboardVisible && styles.containerKeyboardOpen
+          ]} 
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
         >
-          {loading ? (
-            <ActivityIndicator color="#fff" />
-          ) : (
-            <View style={styles.submitBtnContent}>
-              <Text style={styles.submitBtnText}>S'inscrire</Text>
-              <Ionicons name="arrow-forward" size={18} color="#fff" style={{ marginLeft: 6 }} />
+          
+          {/* LOGO PARFAITEMENT DÉTOURÉ & ADAPTÉ AU CLAVIER */}
+          <View style={[styles.logoWrapper, isKeyboardVisible && styles.logoWrapperCompact]}>
+            <Image 
+              source={require('../../assets/logo.png')} 
+              style={[styles.logo, isKeyboardVisible && styles.logoCompact]} 
+              resizeMode="contain" 
+            />
+          </View>
+
+          <Text style={[styles.title, isKeyboardVisible && styles.titleCompact]}>Créer un compte</Text>
+          <Text style={[styles.subtitle, isKeyboardVisible && styles.subtitleCompact]}>Rejoignez la communauté Logetudiant Sénégal</Text>
+
+          {/* SÉLECTEUR DE RÔLE MODERNE */}
+          <View style={[styles.roleContainer, isKeyboardVisible && { marginBottom: 12 }]}>
+            <TouchableOpacity 
+              style={[styles.roleButton, role === 'etudiant' && styles.roleActive]}
+              onPress={() => setRole('etudiant')}
+              activeOpacity={0.8}
+            >
+              <Ionicons 
+                name="school-outline" 
+                size={18} 
+                color={role === 'etudiant' ? '#fff' : '#475569'} 
+                style={{ marginRight: 6 }} 
+              />
+              <Text style={[styles.roleText, role === 'etudiant' && styles.roleTextActive]}>Étudiant</Text>
+            </TouchableOpacity>
+            <TouchableOpacity 
+              style={[styles.roleButton, role === 'bailleur' && { backgroundColor: '#E8A008' }]}
+              onPress={() => setRole('bailleur')}
+              activeOpacity={0.8}
+            >
+              <Ionicons 
+                name="home-outline" 
+                size={18} 
+                color={role === 'bailleur' ? '#fff' : '#475569'} 
+                style={{ marginRight: 6 }} 
+              />
+              <Text style={[styles.roleText, role === 'bailleur' && styles.roleTextActive]}>Bailleur</Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* CHAMP PRÉNOM */}
+          <View style={styles.inputContainer}>
+            <Ionicons name="person-outline" size={19} color="#003880" style={styles.inputIcon} />
+            <TextInput 
+              style={styles.inputField} 
+              placeholder="Prénom" 
+              placeholderTextColor="#94A3B8"
+              value={prenom} 
+              onChangeText={setPrenom}
+              maxLength={20}
+              onFocus={() => {
+                setTimeout(() => {
+                  scrollViewRef.current?.scrollTo({ y: 40, animated: true });
+                }, 100);
+              }}
+            />
+          </View>
+
+          {/* CHAMP NOM */}
+          <View style={styles.inputContainer}>
+            <Ionicons name="person-outline" size={19} color="#003880" style={styles.inputIcon} />
+            <TextInput 
+              style={styles.inputField} 
+              placeholder="Nom" 
+              placeholderTextColor="#94A3B8"
+              value={nom} 
+              onChangeText={setNom}
+              maxLength={15}
+              onFocus={() => {
+                setTimeout(() => {
+                  scrollViewRef.current?.scrollTo({ y: 90, animated: true });
+                }, 100);
+              }}
+            />
+          </View>
+
+          {/* CHAMP NUMÉRO DE TÉLÉPHONE (9 CHIFFRES UNIQUEMENT) */}
+          <View style={styles.inputContainer}>
+            <Ionicons name="call-outline" size={19} color="#003880" style={styles.inputIcon} />
+            <TextInput 
+              style={styles.inputField} 
+              placeholder="Numéro de téléphone" 
+              placeholderTextColor="#94A3B8"
+              value={telephone} 
+              onChangeText={setTelephone} 
+              keyboardType="numeric"
+              maxLength={9}
+              onFocus={() => {
+                setTimeout(() => {
+                  scrollViewRef.current?.scrollTo({ y: 140, animated: true });
+                }, 100);
+              }}
+            />
+          </View>
+
+          {/* CHAMP MOT DE PASSE (6 CHIFFRES AVEC ŒIL) */}
+          <View style={styles.passwordContainer}>
+            <Ionicons name="lock-closed-outline" size={19} color="#003880" style={styles.inputIcon} />
+            <TextInput 
+              style={styles.passwordInput} 
+              placeholder="Mot de passe (6 chiffres)" 
+              placeholderTextColor="#94A3B8"
+              value={password} 
+              onChangeText={setPassword} 
+              secureTextEntry={!showPassword}
+              keyboardType="numeric"
+              maxLength={6}
+              onFocus={() => {
+                setTimeout(() => {
+                  scrollViewRef.current?.scrollTo({ y: 190, animated: true });
+                }, 120);
+              }}
+            />
+            <TouchableOpacity 
+              onPress={() => setShowPassword(!showPassword)} 
+              style={styles.eyeIcon}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            >
+              <Ionicons 
+                name={showPassword ? "eye-off-outline" : "eye-outline"} 
+                size={22} 
+                color="#64748B" 
+              />
+            </TouchableOpacity>
+          </View>
+
+          {/* SECTION SPÉCIFIQUE BAILLEUR */}
+          {role === 'bailleur' && (
+            <View style={styles.bailleurCard}>
+              <View style={styles.bailleurHeader}>
+                <Ionicons name="shield-checkmark-outline" size={20} color="#003880" style={{ marginRight: 6 }} />
+                <Text style={styles.bailleurTitle}>Vérification du profil Bailleur</Text>
+              </View>
+              <Text style={styles.bailleurDesc}>
+                Fournissez au moins une pièce justificative (CNI, passeport, titre de propriété) pour authentifier votre identité.
+              </Text>
+              
+              <TouchableOpacity style={styles.filePickerBtn} onPress={handleAddJustificatif}>
+                <Ionicons name="cloud-upload-outline" size={18} color="#fff" style={{ marginRight: 6 }} />
+                <Text style={styles.filePickerText}>
+                  Ajouter un document ({justificatifsUris.length}/5)
+                </Text>
+              </TouchableOpacity>
+
+              {/* Aperçu des pièces ajoutées */}
+              {justificatifsUris.length > 0 && (
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.previewScroll}>
+                  {justificatifsUris.map((uri, index) => (
+                    <View key={index} style={styles.thumbContainer}>
+                      <Image source={{ uri }} style={styles.thumbImage} />
+                      <TouchableOpacity 
+                        style={styles.removeBtn} 
+                        onPress={() => handleRemoveJustificatif(index)}
+                      >
+                        <Ionicons name="close" size={14} color="#fff" />
+                      </TouchableOpacity>
+                    </View>
+                  ))}
+                </ScrollView>
+              )}
             </View>
           )}
-        </TouchableOpacity>
 
-        {/* LIEN VERS CONNEXION */}
-        <View style={styles.loginLinkContainer}>
-          <TouchableOpacity onPress={() => navigation.navigate('Login')}>
-            <Text style={styles.loginLinkText}>
-              Vous avez déjà un compte ? <Text style={styles.loginLinkHighlight}>Se connecter</Text>
-            </Text>
+          {/* BOUTON S'INSCRIRE AVEC CODE 6 CHIFFRES */}
+          <TouchableOpacity 
+            style={styles.submitBtn} 
+            onPress={handleInitiateRegister} 
+            disabled={loading}
+            activeOpacity={0.85}
+          >
+            {loading ? (
+              <ActivityIndicator color="#fff" />
+            ) : (
+              <View style={styles.submitBtnContent}>
+                <Text style={styles.submitBtnText}>S'inscrire</Text>
+                <Ionicons name="arrow-forward" size={18} color="#fff" style={{ marginLeft: 6 }} />
+              </View>
+            )}
           </TouchableOpacity>
-        </View>
 
-      </ScrollView>
+          {/* LIEN VERS CONNEXION */}
+          <View style={styles.loginLinkContainer}>
+            <TouchableOpacity onPress={() => navigation.navigate('Login')}>
+              <Text style={styles.loginLinkText}>
+                Vous avez déjà un compte ? <Text style={styles.loginLinkHighlight}>Se connecter</Text>
+              </Text>
+            </TouchableOpacity>
+          </View>
+
+        </ScrollView>
+      </TouchableWithoutFeedback>
 
       {/* MODALE DE VÉRIFICATION DU CODE SMS ULTRA-PROFESSIONNELLE */}
       <Modal 
@@ -505,127 +553,141 @@ export default function RegisterScreen({ navigation, route }) {
         onRequestClose={() => setCodeModalVisible(false)}
       >
         <KeyboardAvoidingView 
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined} 
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'} 
           style={styles.modalOverlay}
+          keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
         >
-          <View style={styles.modalCard}>
-            <View style={styles.modalBar} />
-
-            <View style={styles.modalTopRow}>
-              <View style={styles.modalBadgeCircle}>
-                <Ionicons name="shield-checkmark" size={26} color="#003880" />
-              </View>
-              <TouchableOpacity 
-                style={styles.modalCloseTopRight} 
-                onPress={() => setCodeModalVisible(false)}
-                hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-              >
-                <Ionicons name="close" size={22} color="#64748B" />
-              </TouchableOpacity>
-            </View>
-
-            <Text style={styles.modalTitleCentered}>Vérification du compte</Text>
-            <Text style={styles.modalDescCentered}>
-              Saisissez le code à 6 chiffres envoyé au{'\n'}
-              <Text style={styles.phoneHighlight}>+221 {telephone}</Text>
-            </Text>
-
-            {/* 6 CELLULES DU CODE PIN OTP ULTRA-PROFESSIONNEL */}
-            <TouchableOpacity 
-              style={styles.otpContainer} 
-              activeOpacity={1} 
-              onPress={() => otpInputRef.current?.focus()}
+          <TouchableOpacity 
+            style={styles.modalBackdropDismiss} 
+            activeOpacity={1} 
+            onPress={Keyboard.dismiss} 
+          />
+          <View style={[styles.modalCard, isKeyboardVisible && styles.modalCardWithKeyboard]}>
+            <ScrollView 
+              showsVerticalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
+              contentContainerStyle={{ paddingBottom: isKeyboardVisible ? 36 : 10 }}
+              bounces={false}
             >
-              <TextInput
-                ref={otpInputRef}
-                value={verificationCode}
-                onChangeText={(txt) => {
-                  const clean = txt.replace(/[^0-9]/g, '').slice(0, 6);
-                  setVerificationCode(clean);
-                }}
-                keyboardType="number-pad"
-                maxLength={6}
-                style={styles.hiddenInput}
-                autoFocus={true}
-              />
-              {[0, 1, 2, 3, 4, 5].map((i) => {
-                const char = verificationCode[i] || '';
-                const isCurrent = verificationCode.length === i;
-                const isFilled = char !== '';
-                return (
-                  <View 
-                    key={i} 
-                    style={[
-                      styles.otpCell,
-                      isCurrent && styles.otpCellActive,
-                      isFilled && styles.otpCellFilled
-                    ]}
-                  >
-                    <Text style={styles.otpCellText}>{char}</Text>
-                  </View>
-                );
-              })}
-            </TouchableOpacity>
+              <View style={styles.modalBar} />
 
-            {/* BADGE CODE DÉMO DISCRET EN MODE ATTENTE PASSERELLE */}
-            {demoCode ? (
-              <TouchableOpacity 
-                style={styles.demoCodePill}
-                onPress={() => setVerificationCode(demoCode)}
-                activeOpacity={0.8}
-              >
-                <Ionicons name="sparkles" size={14} color="#E8A008" style={{ marginRight: 6 }} />
-                <Text style={styles.demoCodeText}>
-                  Code reçu : <Text style={styles.demoCodeBold}>{demoCode}</Text>  (Toucher pour insérer)
-                </Text>
-              </TouchableOpacity>
-            ) : null}
-
-            {/* COMPTE À REBOURS / RENVOYER UN NOUVEAU CODE */}
-            <View style={styles.resendRow}>
-              {countdown > 0 ? (
-                <Text style={styles.countdownText}>
-                  Renvoyer un nouveau code dans <Text style={styles.countdownNumber}>{countdown}s</Text>
-                </Text>
-              ) : (
+              <View style={[styles.modalTopRow, isKeyboardVisible && { marginBottom: 6 }]}>
+                <View style={[styles.modalBadgeCircle, isKeyboardVisible && { width: 44, height: 44, borderRadius: 22 }]}>
+                  <Ionicons name="shield-checkmark" size={isKeyboardVisible ? 20 : 26} color="#003880" />
+                </View>
                 <TouchableOpacity 
-                  onPress={handleResendCode}
-                  disabled={resendingCode}
-                  activeOpacity={0.7}
+                  style={styles.modalCloseTopRight} 
+                  onPress={() => setCodeModalVisible(false)}
+                  hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
                 >
-                  <Text style={styles.resendActiveText}>
-                    {resendingCode ? "Envoi en cours..." : "Renvoyer un nouveau code"}
+                  <Ionicons name="close" size={22} color="#64748B" />
+                </TouchableOpacity>
+              </View>
+
+              <Text style={[styles.modalTitleCentered, isKeyboardVisible && { fontSize: 18, marginBottom: 2 }]}>
+                Vérification du compte
+              </Text>
+              <Text style={styles.modalDescCentered}>
+                Saisissez le code à 6 chiffres envoyé au{'\n'}
+                <Text style={styles.phoneHighlight}>+221 {telephone}</Text>
+              </Text>
+
+              {/* 6 CELLULES DU CODE PIN OTP ULTRA-PROFESSIONNEL */}
+              <View style={styles.otpContainer}>
+                <TextInput
+                  ref={otpInputRef}
+                  value={verificationCode}
+                  onChangeText={(txt) => {
+                    const clean = txt.replace(/[^0-9]/g, '').slice(0, 6);
+                    setVerificationCode(clean);
+                  }}
+                  keyboardType="number-pad"
+                  maxLength={6}
+                  style={styles.hiddenInput}
+                  autoFocus={true}
+                  caretHidden={true}
+                />
+                <View style={styles.otpCellsRow} pointerEvents="none">
+                  {[0, 1, 2, 3, 4, 5].map((i) => {
+                    const char = verificationCode[i] || '';
+                    const isCurrent = verificationCode.length === i;
+                    const isFilled = char !== '';
+                    return (
+                      <View 
+                        key={i} 
+                        style={[
+                          styles.otpCell,
+                          isCurrent && styles.otpCellActive,
+                          isFilled && styles.otpCellFilled
+                        ]}
+                      >
+                        <Text style={styles.otpCellText}>{char}</Text>
+                      </View>
+                    );
+                  })}
+                </View>
+              </View>
+
+              {/* BADGE CODE DÉMO DISCRET EN MODE ATTENTE PASSERELLE */}
+              {demoCode ? (
+                <TouchableOpacity 
+                  style={styles.demoCodePill}
+                  onPress={() => setVerificationCode(demoCode)}
+                  activeOpacity={0.8}
+                >
+                  <Ionicons name="sparkles" size={14} color="#E8A008" style={{ marginRight: 6 }} />
+                  <Text style={styles.demoCodeText}>
+                    Code reçu : <Text style={styles.demoCodeBold}>{demoCode}</Text>  (Toucher pour insérer)
                   </Text>
                 </TouchableOpacity>
-              )}
-            </View>
+              ) : null}
 
-            {/* BOUTON CONFIRMER LE CODE */}
-            <TouchableOpacity 
-              style={[
-                styles.modalConfirmBtn, 
-                verificationCode.length === 6 ? styles.modalConfirmBtnActive : styles.modalConfirmBtnDisabled
-              ]} 
-              onPress={handleConfirmCodeAndRegister}
-              disabled={verifying || verificationCode.length !== 6}
-              activeOpacity={0.85}
-            >
-              {verifying ? (
-                <ActivityIndicator color="#fff" />
-              ) : (
-                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}>
-                  <Text style={styles.modalConfirmBtnText}>Confirmer et activer mon compte</Text>
-                  <Ionicons name="checkmark-circle" size={18} color="#fff" style={{ marginLeft: 6 }} />
-                </View>
-              )}
-            </TouchableOpacity>
+              {/* COMPTE À REBOURS / RENVOYER UN NOUVEAU CODE */}
+              <View style={styles.resendRow}>
+                {countdown > 0 ? (
+                  <Text style={styles.countdownText}>
+                    Renvoyer un nouveau code dans <Text style={styles.countdownNumber}>{countdown}s</Text>
+                  </Text>
+                ) : (
+                  <TouchableOpacity 
+                    onPress={handleResendCode}
+                    disabled={resendingCode}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={styles.resendActiveText}>
+                      {resendingCode ? "Envoi en cours..." : "Renvoyer un nouveau code"}
+                    </Text>
+                  </TouchableOpacity>
+                )}
+              </View>
 
-            <TouchableOpacity 
-              style={styles.modalCancelLink} 
-              onPress={() => setCodeModalVisible(false)}
-            >
-              <Text style={styles.modalCancelLinkText}>Modifier le numéro de téléphone</Text>
-            </TouchableOpacity>
+              {/* BOUTON CONFIRMER LE CODE */}
+              <TouchableOpacity 
+                style={[
+                  styles.modalConfirmBtn, 
+                  verificationCode.length === 6 ? styles.modalConfirmBtnActive : styles.modalConfirmBtnDisabled
+                ]} 
+                onPress={handleConfirmCodeAndRegister}
+                disabled={verifying || verificationCode.length !== 6}
+                activeOpacity={0.85}
+              >
+                {verifying ? (
+                  <ActivityIndicator color="#fff" />
+                ) : (
+                  <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}>
+                    <Text style={styles.modalConfirmBtnText}>Confirmer et activer mon compte</Text>
+                    <Ionicons name="checkmark-circle" size={18} color="#fff" style={{ marginLeft: 6 }} />
+                  </View>
+                )}
+              </TouchableOpacity>
+
+              <TouchableOpacity 
+                style={styles.modalCancelLink} 
+                onPress={() => setCodeModalVisible(false)}
+              >
+                <Text style={styles.modalCancelLinkText}>Modifier le numéro de téléphone</Text>
+              </TouchableOpacity>
+            </ScrollView>
           </View>
         </KeyboardAvoidingView>
       </Modal>
@@ -636,21 +698,33 @@ export default function RegisterScreen({ navigation, route }) {
 
 const styles = StyleSheet.create({
   container: { 
-    padding: 24, 
+    paddingHorizontal: 24, 
     backgroundColor: '#F8FAFC', 
     flexGrow: 1, 
     justifyContent: 'center',
     paddingTop: 36,
-    paddingBottom: 24,
+    paddingBottom: 36,
+  },
+  containerKeyboardOpen: {
+    justifyContent: 'flex-start',
+    paddingTop: 12,
+    paddingBottom: 240, // Espace généreux pour faire défiler bien au-dessus du clavier
   },
   logoWrapper: {
     alignItems: 'center',
     marginBottom: 16,
     backgroundColor: 'transparent',
   },
+  logoWrapperCompact: {
+    marginBottom: 6,
+  },
   logo: {
     width: 140,
     height: 120,
+  },
+  logoCompact: {
+    width: 65,
+    height: 50,
   },
   title: { 
     fontSize: 26, 
@@ -659,12 +733,19 @@ const styles = StyleSheet.create({
     textAlign: 'center', 
     marginBottom: 4 
   },
+  titleCompact: {
+    fontSize: 21,
+    marginBottom: 2,
+  },
   subtitle: { 
     fontSize: 13, 
     color: '#E8A008', // Ocre doré officiel du logo
     fontWeight: '700',
     textAlign: 'center', 
     marginBottom: 20 
+  },
+  subtitleCompact: {
+    marginBottom: 10,
   },
   roleContainer: { 
     flexDirection: 'row', 
@@ -850,6 +931,10 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(15, 23, 42, 0.65)',
     justifyContent: 'flex-end',
   },
+  modalBackdropDismiss: {
+    flex: 1,
+    width: '100%',
+  },
   modalCard: {
     backgroundColor: '#FFFFFF',
     borderTopLeftRadius: 28,
@@ -857,11 +942,15 @@ const styles = StyleSheet.create({
     paddingHorizontal: 22,
     paddingTop: 12,
     paddingBottom: Platform.OS === 'ios' ? 40 : 26,
+    maxHeight: '90%',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: -6 },
     shadowOpacity: 0.12,
     shadowRadius: 12,
     elevation: 12,
+  },
+  modalCardWithKeyboard: {
+    maxHeight: '85%',
   },
   modalBar: {
     width: 36,
@@ -916,17 +1005,27 @@ const styles = StyleSheet.create({
 
   /* 6 Cellules OTP Pin */
   otpContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    position: 'relative',
+    height: 58,
+    justifyContent: 'center',
     marginVertical: 14,
     paddingHorizontal: 4,
   },
+  otpCellsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    width: '100%',
+  },
   hiddenInput: {
     position: 'absolute',
-    opacity: 0,
-    width: 1,
-    height: 1,
+    top: 0,
+    left: 0,
+    width: '100%',
+    height: 58,
+    opacity: 0.01,
+    zIndex: 10,
+    color: 'transparent',
   },
   otpCell: {
     width: 46,
