@@ -1,4 +1,4 @@
-Add-Type -AssemblyName System.Drawing
+yAdd-Type -AssemblyName System.Drawing
 
 $desktop = "C:\Users\HP\Desktop"
 $logoPath = Join-Path $desktop "logo.jpeg"
