@@ -59,7 +59,6 @@ export default function LoginScreen({ navigation, route }) {
   const [forgotStep, setForgotStep] = useState(1); // 1 = Saisie, 2 = Code 6 chiffres + Nouveau mot de passe
   const [forgotCode, setForgotCode] = useState('');
   const [expectedForgotCode, setExpectedForgotCode] = useState('');
-  const [forgotDemoCode, setForgotDemoCode] = useState(null);
   const [forgotCountdown, setForgotCountdown] = useState(300); // 5 minutes
   const [newPassword, setNewPassword] = useState('');
   const [showNewPassword, setShowNewPassword] = useState(false);
@@ -202,7 +201,6 @@ export default function LoginScreen({ navigation, route }) {
       const res = await sendPhoneVerificationCode(clean, 'recuperation');
       if (res.success) {
         setExpectedForgotCode(res.code);
-        setForgotDemoCode(!res.delivered ? res.code : null);
         setForgotCountdown(300); // 5 minutes
         setForgotCode('');
         setForgotStep(2);
@@ -229,7 +227,6 @@ export default function LoginScreen({ navigation, route }) {
       const res = await sendPhoneVerificationCode(clean, 'recuperation');
       if (res.success) {
         setExpectedForgotCode(res.code);
-        setForgotDemoCode(!res.delivered ? res.code : null);
         setForgotCountdown(300); // 5 minutes
       }
     } catch (e) {
@@ -539,20 +536,6 @@ export default function LoginScreen({ navigation, route }) {
                     })}
                   </View>
                 </View>
-
-                {/* BADGE CODE DÉMO DISCRET EN MODE ATTENTE PASSERELLE */}
-                {forgotDemoCode ? (
-                  <TouchableOpacity 
-                    style={styles.demoCodePill}
-                    onPress={() => setForgotCode(forgotDemoCode)}
-                    activeOpacity={0.8}
-                  >
-                    <Ionicons name="sparkles" size={14} color="#E8A008" style={{ marginRight: 6 }} />
-                    <Text style={styles.demoCodeText}>
-                      Code reçu : <Text style={styles.demoCodeBold}>{forgotDemoCode}</Text>  (Toucher pour insérer)
-                    </Text>
-                  </TouchableOpacity>
-                ) : null}
 
                 {/* COMPTE À REBOURS RENVOI */}
                 <View style={styles.resendRow}>

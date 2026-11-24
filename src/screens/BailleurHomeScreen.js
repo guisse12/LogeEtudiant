@@ -21,6 +21,7 @@ import * as ImagePicker from 'expo-image-picker';
 import * as Location from 'expo-location';
 import { db, auth } from '../config/firebase';
 import { logoutUser } from '../services/authService';
+import { getSubscriptionStatus } from '../services/subscriptionService';
 import { registerForPushNotificationsAsync, subscribeToUserNotifications, broadcastNotification } from '../services/notificationService';
 import { 
   UNIVERSITES, 
@@ -44,6 +45,7 @@ export default function BailleurHomeScreen({ navigation }) {
   
   // État pour la validation du compte bailleur
   const [statutValidation, setStatutValidation] = useState('en_attente');
+  const [subInfo, setSubInfo] = useState(null);
 
   // Formulaire state
   const [titre, setTitre] = useState('');
@@ -97,6 +99,7 @@ export default function BailleurHomeScreen({ navigation }) {
       if (userSnap && userSnap.exists()) {
         const userData = userSnap.data();
         setStatutValidation(userData.statutValidation || 'en_attente');
+        setSubInfo(getSubscriptionStatus(userData));
       }
 
       let list = [];
@@ -213,6 +216,18 @@ export default function BailleurHomeScreen({ navigation }) {
   };
 
   const handleOpenModal = (bien = null) => {
+    if (subInfo?.status === 'expired' && !bien) {
+      Alert.alert(
+        "Abonnement requis",
+        "Votre période d'essai de 30 jours est terminée. Choisissez une formule pour continuer à publier vos logements.",
+        [
+          { text: "Plus tard", style: "cancel" },
+          { text: "Voir les formules (dès 1 000 F)", onPress: () => navigation.navigate('Subscription') }
+        ]
+      );
+      return;
+    }
+
     if (statutValidation !== 'valide' && !bien) {
       Alert.alert(
         "Compte en attente",
@@ -509,6 +524,43 @@ export default function BailleurHomeScreen({ navigation }) {
             </Text>
           </View>
         )}
+
+        {/* BANDEAU ABONNEMENT PRO / 30 JOURS GRATUITS */}
+        <TouchableOpacity 
+          style={styles.subBannerPro} 
+          onPress={() => navigation.navigate('Subscription')}
+          activeOpacity={0.88}
+        >
+          <View style={styles.subBannerIcon}>
+            <Ionicons name="sparkles" size={16} color="#D97706" />
+          </View>
+          <View style={{ flex: 1, marginLeft: 10 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+              <Text style={styles.subBannerTitle}>
+                {subInfo?.status === 'active' ? 'Abonnement Pro Actif' :
+                 subInfo?.status === 'expired' ? 'Abonnement Expiré' : "30 Jours d'Essai Gratuit"}
+              </Text>
+              <View style={[
+                styles.subBannerBadge,
+                subInfo?.status === 'active' && { backgroundColor: '#ECFDF5' },
+                subInfo?.status === 'expired' && { backgroundColor: '#FEF2F2' },
+              ]}>
+                <Text style={[
+                  styles.subBannerBadgeText,
+                  subInfo?.status === 'active' && { color: '#059669' },
+                  subInfo?.status === 'expired' && { color: '#DC2626' },
+                ]}>
+                  {subInfo?.status === 'active' ? `${subInfo.daysLeft}j restants` :
+                   subInfo?.status === 'expired' ? 'Renouveler' : `${subInfo?.daysLeft || 30}j offerts`}
+                </Text>
+              </View>
+            </View>
+            <Text style={styles.subBannerSubtitle} numberOfLines={1}>
+              {subInfo?.status === 'expired' ? 'Touchez ici pour choisir votre pack dès 1 000 FCFA' : 'Publications illimitées & contact direct étudiants'}
+            </Text>
+          </View>
+          <Ionicons name="chevron-forward" size={16} color="#003880" />
+        </TouchableOpacity>
 
         <TouchableOpacity 
           style={[styles.addButton, statutValidation !== 'valide' && { backgroundColor: '#CBD5E0' }]} 
@@ -834,6 +886,53 @@ export default function BailleurHomeScreen({ navigation }) {
 }
 
 const styles = StyleSheet.create({
+  // BANDEAU ABONNEMENT PRO BAILLEUR
+  subBannerPro: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 10,
+    borderWidth: 1.5,
+    borderColor: '#FDE68A',
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 2 },
+  },
+  subBannerIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#FEF3C7',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  subBannerTitle: {
+    fontSize: 13,
+    fontWeight: 'bold',
+    color: '#1E293B',
+    marginRight: 6,
+  },
+  subBannerSubtitle: {
+    fontSize: 11,
+    color: '#64748B',
+    marginTop: 2,
+  },
+  subBannerBadge: {
+    backgroundColor: '#FFFBEB',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  subBannerBadgeText: {
+    fontSize: 10,
+    fontWeight: 'bold',
+    color: '#D97706',
+  },
+
   safeArea: {
     flex: 1,
     backgroundColor: '#F8FAFC',

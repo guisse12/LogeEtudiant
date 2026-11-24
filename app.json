@@ -2,7 +2,7 @@
   "expo": {
     "name": "Logetudiant",
     "slug": "LogeEtudiant",
-    "version": "1.0.2",
+    "version": "1.0.4",
     "orientation": "portrait",
     "icon": "./assets/icon-square.png",
     "userInterfaceStyle": "light",
@@ -27,7 +27,7 @@
         "backgroundColor": "#ffffff"
       },
       "package": "com.capico.logeetudiant",
-      "versionCode": 18,
+      "versionCode": 22,
       "softwareKeyboardLayoutMode": "resize",
       "permissions": [
         "android.permission.INTERNET",

@@ -408,6 +408,20 @@ export default function ProfileScreen({ navigation }) {
           )}
         </TouchableOpacity>
 
+                {/* ACCÈS DIRECT À L'ABONNEMENT BAILLEUR PRO */}
+        {isBailleur && (
+          <TouchableOpacity 
+            style={[styles.saveButton, { backgroundColor: '#002855', marginTop: 10, borderColor: '#002855' }]} 
+            onPress={() => navigation.navigate('Subscription')}
+            activeOpacity={0.88}
+          >
+            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+              <Ionicons name="sparkles" size={18} color="#FBBF24" style={{ marginRight: 8 }} />
+              <Text style={styles.saveButtonText}>👑 Gérer mon Abonnement Bailleur Pro</Text>
+            </View>
+          </TouchableOpacity>
+        )}
+
         {/* ACCÈS DIRECT AU TABLEAU DE BORD ADMIN */}
         {isAdmin && (
           <TouchableOpacity 

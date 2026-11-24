@@ -61,7 +61,6 @@ export default function RegisterScreen({ navigation, route }) {
   const [codeModalVisible, setCodeModalVisible] = useState(false);
   const [verificationCode, setVerificationCode] = useState('');
   const [expectedCode, setExpectedCode] = useState('');
-  const [demoCode, setDemoCode] = useState(null);
   const [countdown, setCountdown] = useState(30);
   const [verifying, setVerifying] = useState(false);
   const [resendingCode, setResendingCode] = useState(false);
@@ -222,7 +221,6 @@ export default function RegisterScreen({ navigation, route }) {
       if (res.success) {
         setExpectedCode(res.code);
         setVerificationCode('');
-        setDemoCode(!res.delivered ? res.code : null);
         setCountdown(30);
         setCodeModalVisible(true);
         setTimeout(() => otpInputRef.current?.focus(), 350);
@@ -323,7 +321,6 @@ export default function RegisterScreen({ navigation, route }) {
       if (res.success) {
         setExpectedCode(res.code);
         setVerificationCode('');
-        setDemoCode(!res.delivered ? res.code : null);
         setCountdown(30);
       }
     } catch (e) {
@@ -627,20 +624,6 @@ export default function RegisterScreen({ navigation, route }) {
                   })}
                 </View>
               </View>
-
-              {/* BADGE CODE DÉMO DISCRET EN MODE ATTENTE PASSERELLE */}
-              {demoCode ? (
-                <TouchableOpacity 
-                  style={styles.demoCodePill}
-                  onPress={() => setVerificationCode(demoCode)}
-                  activeOpacity={0.8}
-                >
-                  <Ionicons name="sparkles" size={14} color="#E8A008" style={{ marginRight: 6 }} />
-                  <Text style={styles.demoCodeText}>
-                    Code reçu : <Text style={styles.demoCodeBold}>{demoCode}</Text>  (Toucher pour insérer)
-                  </Text>
-                </TouchableOpacity>
-              ) : null}
 
               {/* COMPTE À REBOURS / RENVOYER UN NOUVEAU CODE */}
               <View style={styles.resendRow}>

@@ -19,6 +19,7 @@ import ColocatairesScreen from './src/screens/ColocatairesScreen';
 import AjouterColocAnnonceScreen from './src/screens/AjouterColocAnnonceScreen';
 import FavorisScreen from './src/screens/FavorisScreen';
 import NotificationsScreen from './src/screens/NotificationsScreen';
+import SubscriptionScreen from './src/screens/SubscriptionScreen';
 
 const Stack = createNativeStackNavigator();
 
@@ -85,6 +86,11 @@ export default function App() {
         <Stack.Screen 
           name="AjouterColocAnnonce" 
           component={AjouterColocAnnonceScreen} 
+          options={{ headerShown: false }} 
+        />
+        <Stack.Screen 
+          name="Subscription" 
+          component={SubscriptionScreen} 
           options={{ headerShown: false }} 
         />
         <Stack.Screen 

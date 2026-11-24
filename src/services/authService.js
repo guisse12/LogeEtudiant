@@ -195,11 +195,19 @@ export const sendPhoneVerificationCode = async (phone, type = 'inscription') => 
       AsyncStorage.setItem('@pending_session_' + cleanPhone, smsResult.sessionInfo).catch(() => {});
     }
 
+    if (!smsResult?.delivered) {
+      return { 
+        success: false, 
+        delivered: false,
+        error: "Impossible d'envoyer le code par SMS. Veuillez vérifier votre connexion ou réessayer plus tard."
+      };
+    }
+
     return { 
       success: true, 
       code: code,
       cleanPhone: cleanPhone,
-      delivered: smsResult?.delivered || false,
+      delivered: true,
       provider: smsResult?.provider || 'TERMII',
       message: `Votre code de confirmation Logetudiant est : ${code}`
     };
@@ -212,11 +220,9 @@ export const sendPhoneVerificationCode = async (phone, type = 'inscription') => 
       };
     }
     return {
-      success: true,
-      code: code,
-      cleanPhone: cleanPhone,
+      success: false,
       delivered: false,
-      message: `Votre code de confirmation Logetudiant est : ${code}`
+      error: "Impossible d'envoyer le code par SMS. Veuillez réessayer plus tard."
     };
   }
 };
