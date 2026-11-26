@@ -105,13 +105,19 @@ export default function ChatScreen({ route, navigation }) {
       orderBy("createdAt", "asc")
     );
 
-    const unsubscribe = onSnapshot(messagesQuery, (snapshot) => {
-      const msgs = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      }));
-      setMessages(msgs);
-    });
+    const unsubscribe = onSnapshot(
+      messagesQuery, 
+      (snapshot) => {
+        const msgs = snapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        }));
+        setMessages(msgs);
+      },
+      (error) => {
+        console.warn("[CHAT] Erreur écoute messages :", error?.message || error);
+      }
+    );
 
     return () => unsubscribe();
   }, [conversationId]);

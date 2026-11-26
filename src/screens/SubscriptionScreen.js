@@ -11,8 +11,10 @@ import {
   Alert,
   Linking,
   Platform,
+  Modal,
 } from 'react-native';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import { WebView } from 'react-native-webview';
 import { auth, db } from '../config/firebase';
 import { doc, getDoc } from 'firebase/firestore';
 import { 
@@ -20,12 +22,24 @@ import {
   getSubscriptionStatus, 
   activateSubscription 
 } from '../services/subscriptionService';
+import { 
+  initializePayTechPayment, 
+  isPayTechConfigured 
+} from '../services/paytechService';
+import { useTranslation } from '../i18n';
 
 export default function SubscriptionScreen({ navigation }) {
+  const { t } = useTranslation();
   const [selectedPlan, setSelectedPlan] = useState('plan_3_months'); // Par défaut : 3 mois (Populaire)
   const [subscription, setSubscription] = useState(null);
+  const [userData, setUserData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [processingPayment, setProcessingPayment] = useState(false);
+
+  // États pour le guichet de paiement sécurisé CinetPay WebView
+  const [paymentModalVisible, setPaymentModalVisible] = useState(false);
+  const [paymentUrl, setPaymentUrl] = useState('');
+  const [activeTransactionId, setActiveTransactionId] = useState(null);
 
   useEffect(() => {
     fetchStatus();
@@ -37,7 +51,9 @@ export default function SubscriptionScreen({ navigation }) {
       if (!user) return;
       const snap = await getDoc(doc(db, 'users', user.uid));
       if (snap.exists()) {
-        const status = getSubscriptionStatus(snap.data());
+        const uData = snap.data();
+        setUserData(uData);
+        const status = getSubscriptionStatus(uData);
         setSubscription(status);
       }
     } catch (e) {
@@ -49,47 +65,100 @@ export default function SubscriptionScreen({ navigation }) {
 
   const currentPlanObj = SUBSCRIPTION_PLANS.find(p => p.id === selectedPlan) || SUBSCRIPTION_PLANS[0];
 
+  // Gestion du paiement sécurisé PayTech
   const handlePay = async () => {
     const user = auth.currentUser;
     if (!user) {
-      Alert.alert("Connexion requise", "Veuillez vous connecter pour vous abonner.");
+      Alert.alert(t('subscription.connRequired'), t('subscription.connRequiredMsg'));
       return;
     }
 
-    Alert.alert(
-      `Confirmer l'abonnement`,
-      `Formule : ${currentPlanObj.name}\nMontant : ${currentPlanObj.priceFormatted}\n\nSouhaitez-vous procéder au paiement sécurisé via Wave / Orange Money ?`,
-      [
-        { text: "Annuler", style: "cancel" },
-        {
-          text: "Payer avec Wave / OM",
-          onPress: async () => {
-            setProcessingPayment(true);
-            try {
-              // Activation automatique du plan sélectionné
-              await activateSubscription(user.uid, selectedPlan);
-              Alert.alert(
-                "🎉 Félicitations !",
-                `Votre ${currentPlanObj.name} a été activé avec succès !\nVous pouvez désormais publier vos logements en illimité.`,
-                [
-                  { text: "Super !", onPress: () => navigation.goBack() }
-                ]
-              );
-              fetchStatus();
-            } catch (err) {
-              console.error("Erreur souscription :", err);
-              Alert.alert("Erreur", "Impossible de valider l'abonnement. Veuillez réessayer.");
-            } finally {
-              setProcessingPayment(false);
+    try {
+      setProcessingPayment(true);
+      const res = await initializePayTechPayment({
+        amount: currentPlanObj.price,
+        description: currentPlanObj.name,
+        user: userData || { uid: user.uid, email: user.email, telephone: user.phoneNumber },
+        planId: currentPlanObj.id,
+      });
+
+      if (res.success && res.paymentUrl) {
+        setActiveTransactionId(res.token || res.refCommand);
+        setPaymentUrl(res.paymentUrl);
+        setPaymentModalVisible(true);
+      } else {
+        // En cas de souci temporaire, proposer l'alternative directe par WhatsApp
+        Alert.alert(
+          "Paiement Logetudiant",
+          res.error || "Impossible d'ouvrir le guichet PayTech actuellement.",
+          [
+            { text: "Annuler", style: "cancel" },
+            {
+              text: "Payer par WhatsApp (Wave/OM)",
+              onPress: () => {
+                Linking.openURL(
+                  `https://wa.me/221770719357?text=Bonjour,%20je%20souhaite%20activer%20mon%20${encodeURIComponent(currentPlanObj.name)}%20(${encodeURIComponent(currentPlanObj.priceFormatted)})%20par%20Wave/OM.`
+                );
+              },
             }
-          }
+          ]
+        );
+      }
+    } catch (err) {
+      console.error("Erreur init PayTech :", err);
+      Alert.alert("Erreur", "Une erreur est survenue lors de l'accès au paiement.");
+    } finally {
+      setProcessingPayment(false);
+    }
+  };
+
+  // Détection du retour après paiement dans la WebView PayTech
+  const handleNavigationStateChange = async (navState) => {
+    const { url } = navState;
+    if (!url) return;
+
+    // Redirection de succès reconnue (URL de succès PayTech)
+    if (
+      url.includes('payment/success') || 
+      url.includes('paytech.sn/payment/success') ||
+      url.includes('paytech.sn/success') ||
+      url.includes('success=1') ||
+      url.includes('status=ACCEPTED') ||
+      url.includes('status=success')
+    ) {
+      setPaymentModalVisible(false);
+      setProcessingPayment(true);
+      try {
+        const user = auth.currentUser;
+        if (user) {
+          await activateSubscription(user.uid, selectedPlan);
+          const planDisplayName = t(`subscription.plans.${currentPlanObj.id}.name`) || currentPlanObj.name;
+          Alert.alert(
+            t('subscription.paymentSuccessTitle'),
+            t('subscription.paymentSuccessMsg', { plan: planDisplayName }),
+            [{ text: t('subscription.greatBtn'), onPress: () => navigation.goBack() }]
+          );
+          fetchStatus();
         }
-      ]
-    );
+      } catch (err) {
+        console.error("Erreur validation après paiement :", err);
+      } finally {
+        setProcessingPayment(false);
+        setActiveTransactionId(null);
+        setPaymentUrl('');
+      }
+    } else if (
+      url.includes('payment/cancel') ||
+      url.includes('paytech.sn/payment/cancel') ||
+      url.includes('paytech.sn/cancel')
+    ) {
+      setPaymentModalVisible(false);
+      setPaymentUrl('');
+    }
   };
 
   const handleContactSupport = () => {
-    Linking.openURL('https://wa.me/221763318157?text=Bonjour,%20je%20souhaite%20activer%20mon%20abonnement%20Bailleur%20Logetudiant.');
+    Linking.openURL('https://wa.me/221770719357?text=Bonjour,%20je%20souhaite%20activer%20mon%20abonnement%20Bailleur%20Logetudiant.');
   };
 
   return (
@@ -106,8 +175,8 @@ export default function SubscriptionScreen({ navigation }) {
           <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
         </TouchableOpacity>
         <View style={styles.headerTitleBox}>
-          <Text style={styles.headerSubtitle}>ESPACE PRIVILÈGE</Text>
-          <Text style={styles.headerTitle}>Abonnement Bailleur Pro</Text>
+          <Text style={styles.headerSubtitle}>{t('subscription.privilegeSpace')}</Text>
+          <Text style={styles.headerTitle}>{t('subscription.title')}</Text>
         </View>
         <View style={styles.headerCrownIcon}>
           <Ionicons name="sparkles" size={22} color="#FBBF24" />
@@ -143,14 +212,14 @@ export default function SubscriptionScreen({ navigation }) {
             </View>
             <View style={{ flex: 1 }}>
               <Text style={styles.statusTitle}>
-                {subscription.status === 'active' && "Abonnement Pro Actif"}
-                {subscription.status === 'trial' && "🎉 30 Jours d'Essai Gratuit"}
-                {subscription.status === 'expired' && "Abonnement Expiré"}
+                {subscription.status === 'active' && t('subscription.statusActiveTitle')}
+                {subscription.status === 'trial' && t('subscription.statusTrialTitle')}
+                {subscription.status === 'expired' && t('subscription.statusExpiredTitle')}
               </Text>
               <Text style={styles.statusDesc}>
-                {subscription.status === 'active' && `Publications illimitées actives (${subscription.daysLeft} jours restants).`}
-                {subscription.status === 'trial' && `Il vous reste ${subscription.daysLeft} jours offerts pour publier en illimité.`}
-                {subscription.status === 'expired' && "Choisissez une formule ci-dessous pour continuer à publier."}
+                {subscription.status === 'active' && t('subscription.statusActiveDesc', { days: subscription.daysLeft })}
+                {subscription.status === 'trial' && t('subscription.statusTrialDesc', { days: subscription.daysLeft })}
+                {subscription.status === 'expired' && t('subscription.statusExpiredDesc')}
               </Text>
             </View>
           </View>
@@ -158,16 +227,22 @@ export default function SubscriptionScreen({ navigation }) {
 
         {/* TITRE DE SECTION FORMULES */}
         <View style={styles.sectionHeading}>
-          <Text style={styles.sectionTitle}>Choisissez votre formule</Text>
+          <Text style={styles.sectionTitle}>{t('subscription.choosePlan')}</Text>
           <Text style={styles.sectionSubtitle}>
-            1er mois 100% offert, puis renouvelez selon vos besoins
+            {t('subscription.choosePlanSubtitle')}
           </Text>
         </View>
 
-        {/* CARTES DES 3 PACKS */}
+        {/* CARTES DES 4 PACKS */}
         <View style={styles.plansContainer}>
           {SUBSCRIPTION_PLANS.map((plan) => {
             const isSelected = selectedPlan === plan.id;
+            const planName = t(`subscription.plans.${plan.id}.name`) || plan.name;
+            const planDesc = t(`subscription.plans.${plan.id}.desc`) || plan.description;
+            const planPerMonth = t(`subscription.plans.${plan.id}.perMonth`) || plan.perMonthText;
+            const planBadge = t(`subscription.plans.${plan.id}.badge`) || plan.badge;
+            const planSavings = t(`subscription.plans.${plan.id}.savings`) || plan.savings;
+
             return (
               <TouchableOpacity
                 key={plan.id}
@@ -180,12 +255,12 @@ export default function SubscriptionScreen({ navigation }) {
                 activeOpacity={0.88}
               >
                 {/* BADGE POPULAIRE OU MEILLEUR PRIX */}
-                {plan.badge ? (
+                {planBadge ? (
                   <View style={[
                     styles.planBadge,
                     plan.bestValue ? styles.planBadgeBestValue : styles.planBadgePopular
                   ]}>
-                    <Text style={styles.planBadgeText}>{plan.badge}</Text>
+                    <Text style={styles.planBadgeText}>{planBadge}</Text>
                   </View>
                 ) : null}
 
@@ -194,20 +269,20 @@ export default function SubscriptionScreen({ navigation }) {
                     {isSelected ? <View style={styles.radioInnerCircle} /> : null}
                   </View>
                   <View style={{ flex: 1, marginLeft: 10 }}>
-                    <Text style={styles.planName}>{plan.name}</Text>
-                    <Text style={styles.planDesc}>{plan.description}</Text>
+                    <Text style={styles.planName}>{planName}</Text>
+                    <Text style={styles.planDesc}>{planDesc}</Text>
                   </View>
                   <View style={styles.priceContainer}>
                     <Text style={styles.planPrice}>{plan.priceFormatted}</Text>
-                    <Text style={styles.planPeriod}>{plan.perMonthText}</Text>
+                    <Text style={styles.planPeriod}>{planPerMonth}</Text>
                   </View>
                 </View>
 
                 {/* ÉCONOMIE DU PACK */}
-                {plan.savings ? (
+                {planSavings ? (
                   <View style={styles.savingsPill}>
                     <Ionicons name="pricetag" size={12} color="#059669" style={{ marginRight: 4 }} />
-                    <Text style={styles.savingsText}>{plan.savings}</Text>
+                    <Text style={styles.savingsText}>{planSavings}</Text>
                   </View>
                 ) : null}
               </TouchableOpacity>
@@ -217,14 +292,14 @@ export default function SubscriptionScreen({ navigation }) {
 
         {/* AVANTAGES INCLUS */}
         <View style={styles.benefitsCard}>
-          <Text style={styles.benefitsTitle}>Ce qui est inclus dans votre abonnement :</Text>
+          <Text style={styles.benefitsTitle}>{t('subscription.includedTitle')}</Text>
           
           <View style={styles.benefitRow}>
             <View style={styles.checkIcon}>
               <Ionicons name="checkmark-sharp" size={14} color="#FFFFFF" />
             </View>
             <Text style={styles.benefitText}>
-              <Text style={{ fontWeight: 'bold' }}>Publications illimitées</Text> de studios, chambres et appartements
+              <Text style={{ fontWeight: 'bold' }}>{t('subscription.benefitUnlimited')}</Text>{t('subscription.benefitUnlimitedDesc')}
             </Text>
           </View>
 
@@ -233,7 +308,7 @@ export default function SubscriptionScreen({ navigation }) {
               <Ionicons name="checkmark-sharp" size={14} color="#FFFFFF" />
             </View>
             <Text style={styles.benefitText}>
-              <Text style={{ fontWeight: 'bold' }}>Contacts directs étudiants</Text> par appels téléphoniques & WhatsApp
+              <Text style={{ fontWeight: 'bold' }}>{t('subscription.benefitDirectContact')}</Text>{t('subscription.benefitDirectContactDesc')}
             </Text>
           </View>
 
@@ -242,7 +317,7 @@ export default function SubscriptionScreen({ navigation }) {
               <Ionicons name="checkmark-sharp" size={14} color="#FFFFFF" />
             </View>
             <Text style={styles.benefitText}>
-              <Text style={{ fontWeight: 'bold' }}>Badge Bailleur Vérifié</Text> pour rassurer les étudiants et parents
+              <Text style={{ fontWeight: 'bold' }}>{t('subscription.benefitVerifiedBadge')}</Text>{t('subscription.benefitVerifiedBadgeDesc')}
             </Text>
           </View>
 
@@ -251,14 +326,14 @@ export default function SubscriptionScreen({ navigation }) {
               <Ionicons name="checkmark-sharp" size={14} color="#FFFFFF" />
             </View>
             <Text style={styles.benefitText}>
-              <Text style={{ fontWeight: 'bold' }}>Visibilité prioritaire</Text> en tête des résultats de recherche
+              <Text style={{ fontWeight: 'bold' }}>{t('subscription.benefitPriority')}</Text>{t('subscription.benefitPriorityDesc')}
             </Text>
           </View>
         </View>
 
-        {/* MOYENS DE PAIEMENT SÉNÉGAL */}
+        {/* MOYENS DE PAIEMENT SÉCURISÉS PAYTECH */}
         <View style={styles.paymentMethodsRow}>
-          <Text style={styles.paymentMethodsLabel}>Paiement mobile sécurisé au Sénégal :</Text>
+          <Text style={styles.paymentMethodsLabel}>{t('subscription.paymentMethodsLabel')}</Text>
           <View style={styles.operatorBadges}>
             <View style={[styles.opBadge, { backgroundColor: '#1DC7EA' }]}>
               <Text style={[styles.opBadgeText, { color: '#002855' }]}>Wave</Text>
@@ -268,6 +343,9 @@ export default function SubscriptionScreen({ navigation }) {
             </View>
             <View style={[styles.opBadge, { backgroundColor: '#ED1C24' }]}>
               <Text style={[styles.opBadgeText, { color: '#FFFFFF' }]}>Free Money</Text>
+            </View>
+            <View style={[styles.opBadge, { backgroundColor: '#002855' }]}>
+              <Text style={[styles.opBadgeText, { color: '#FFFFFF' }]}>💳 Visa / Mastercard</Text>
             </View>
           </View>
         </View>
@@ -279,7 +357,7 @@ export default function SubscriptionScreen({ navigation }) {
           activeOpacity={0.7}
         >
           <Ionicons name="logo-whatsapp" size={18} color="#25D366" style={{ marginRight: 6 }} />
-          <Text style={styles.helpText}>Besoin d'aide ? Contactez notre support WhatsApp</Text>
+          <Text style={styles.helpText}>{t('subscription.whatsappHelp')}</Text>
         </TouchableOpacity>
       </ScrollView>
 
@@ -296,8 +374,12 @@ export default function SubscriptionScreen({ navigation }) {
           ) : (
             <View style={styles.ctaContent}>
               <View>
-                <Text style={styles.ctaSubtext}>Activer la formule {currentPlanObj.name}</Text>
-                <Text style={styles.ctaTitle}>Payer {currentPlanObj.priceFormatted}</Text>
+                <Text style={styles.ctaSubtext}>
+                  {t('subscription.activatePlan', { plan: t(`subscription.plans.${currentPlanObj.id}.name`) || currentPlanObj.name })}
+                </Text>
+                <Text style={styles.ctaTitle}>
+                  {t('subscription.payAmount', { amount: currentPlanObj.priceFormatted })}
+                </Text>
               </View>
               <View style={styles.ctaArrowCircle}>
                 <Ionicons name="arrow-forward" size={18} color="#003880" />
@@ -306,6 +388,77 @@ export default function SubscriptionScreen({ navigation }) {
           )}
         </TouchableOpacity>
       </View>
+
+      {/* GUICHET DE PAIEMENT SÉCURISÉ CINETPAY (MODALE WEBVIEW INTÉGRÉE) */}
+      <Modal
+        visible={paymentModalVisible}
+        animationType="slide"
+        transparent={false}
+        onRequestClose={() => {
+          Alert.alert(
+            t('subscription.interruptPaymentTitle'),
+            t('subscription.interruptPaymentDesc'),
+            [
+              { text: t('subscription.continueBtn'), style: "cancel" },
+              { text: t('subscription.closeBtn'), style: "destructive", onPress: () => setPaymentModalVisible(false) }
+            ]
+          );
+        }}
+      >
+        <SafeAreaView style={{ flex: 1, backgroundColor: '#002855' }}>
+          <StatusBar barStyle="light-content" backgroundColor="#002855" />
+
+          {/* BARRE DE TITRE DU GUICHET */}
+          <View style={styles.webHeader}>
+            <TouchableOpacity 
+              style={styles.webCloseBtn} 
+              onPress={() => {
+                Alert.alert(
+                  t('subscription.interruptPaymentTitle'),
+                  t('subscription.interruptPaymentDesc'),
+                  [
+                    { text: t('subscription.continueBtn'), style: "cancel" },
+                    { text: t('subscription.closeBtn'), style: "destructive", onPress: () => setPaymentModalVisible(false) }
+                  ]
+                );
+              }}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            >
+              <Ionicons name="close" size={22} color="#FFFFFF" />
+            </TouchableOpacity>
+
+            <View style={styles.webTitleBox}>
+              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                <Ionicons name="shield-checkmark" size={14} color="#FBBF24" style={{ marginRight: 5 }} />
+                <Text style={styles.webTitle}>{t('subscription.cinetpayGatewayTitle')}</Text>
+              </View>
+              <Text style={styles.webSubtitle}>{t('subscription.cinetpayGatewaySubtitle')}</Text>
+            </View>
+
+            <View style={{ width: 36 }} />
+          </View>
+
+          {/* WEBVIEW OFFICIELLE PAYTECH */}
+          {paymentUrl ? (
+            <WebView
+              source={{ uri: paymentUrl }}
+              onNavigationStateChange={handleNavigationStateChange}
+              startInLoadingState={true}
+              renderLoading={() => (
+                <View style={styles.webLoader}>
+                  <ActivityIndicator size="large" color="#003880" />
+                  <Text style={styles.webLoaderText}>{t('subscription.connectingGateway')}</Text>
+                  <Text style={styles.webLoaderSubtext}>{t('subscription.pleaseWait')}</Text>
+                </View>
+              )}
+            />
+          ) : (
+            <View style={styles.webLoader}>
+              <ActivityIndicator size="large" color="#003880" />
+            </View>
+          )}
+        </SafeAreaView>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -567,13 +720,15 @@ const styles = StyleSheet.create({
   },
   operatorBadges: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     justifyContent: 'center',
+    gap: 6,
   },
   opBadge: {
-    paddingHorizontal: 12,
+    paddingHorizontal: 9,
     paddingVertical: 5,
     borderRadius: 8,
-    marginHorizontal: 4,
+    marginVertical: 2,
   },
   opBadgeText: {
     fontSize: 11,
@@ -637,5 +792,59 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
     justifyContent: 'center',
     alignItems: 'center',
+  },
+
+  // STYLES DU GUICHET DE PAIEMENT SÉCURISÉ CINETPAY (WEBVIEW)
+  webHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#002855',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#001A38',
+  },
+  webCloseBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  webTitleBox: {
+    alignItems: 'center',
+  },
+  webTitle: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    color: '#FFFFFF',
+  },
+  webSubtitle: {
+    fontSize: 10,
+    color: '#93C5FD',
+    marginTop: 2,
+    fontWeight: '500',
+  },
+  webLoader: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: '#FFFFFF',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
+  },
+  webLoaderText: {
+    marginTop: 14,
+    fontSize: 14,
+    color: '#0F172A',
+    fontWeight: '700',
+    textAlign: 'center',
+  },
+  webLoaderSubtext: {
+    marginTop: 6,
+    fontSize: 12,
+    color: '#64748B',
+    textAlign: 'center',
   },
 });

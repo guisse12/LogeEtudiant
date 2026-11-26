@@ -2,7 +2,7 @@
   "expo": {
     "name": "Logetudiant",
     "slug": "LogeEtudiant",
-    "version": "1.0.4",
+    "version": "1.0.6",
     "orientation": "portrait",
     "icon": "./assets/icon-square.png",
     "userInterfaceStyle": "light",
@@ -17,8 +17,11 @@
           "mailto",
           "comgooglemaps",
           "iosamap"
-        ]
-      }
+        ],
+        "NSCameraUsageDescription": "Logetudiant a besoin d'accéder à votre appareil photo pour vous permettre de prendre en photo les documents et logements."
+      },
+      "bundleIdentifier": "com.capico.logeetudiant",
+      "buildNumber": "2"
     },
     "android": {
       "icon": "./assets/icon-square.png",
@@ -27,7 +30,7 @@
         "backgroundColor": "#ffffff"
       },
       "package": "com.capico.logeetudiant",
-      "versionCode": 22,
+      "versionCode": 24,
       "softwareKeyboardLayoutMode": "resize",
       "permissions": [
         "android.permission.INTERNET",

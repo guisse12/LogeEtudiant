@@ -2,8 +2,10 @@ import React, { useState, useEffect } from 'react';
 import { StyleSheet, Text, View, FlatList, TouchableOpacity, Image, ActivityIndicator, Linking, Alert } from 'react-native';
 import { collection, getDocs, doc, deleteDoc } from 'firebase/firestore';
 import { db, auth } from '../config/firebase';
+import { useTranslation } from '../i18n';
 
 export default function FavorisScreen({ navigation }) {
+  const { t } = useTranslation();
   const [favoris, setFavoris] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -81,10 +83,10 @@ export default function FavorisScreen({ navigation }) {
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>Mes Logements Favoris ({favoris.length})</Text>
+      <Text style={styles.title}>{t('studentHome.myFavorites')} ({favoris.length})</Text>
       {favoris.length === 0 ? (
         <View style={styles.emptyContainer}>
-          <Text style={styles.emptyText}>Vous n'avez enregistré aucun favori pour le moment.</Text>
+          <Text style={styles.emptyText}>{t('studentHome.noResultsDesc')}</Text>
         </View>
       ) : (
         <FlatList
@@ -111,14 +113,14 @@ export default function FavorisScreen({ navigation }) {
               </TouchableOpacity>
               <View style={styles.infoContainer}>
                 <Text style={styles.cardTitle}>{item.titre}</Text>
-                <Text style={styles.cardPrice}>{item.prix} FCFA / mois</Text>
-                <Text style={styles.cardAddress} numberOfLines={1}>📍 {item.localisation?.adresse || "Adresse non spécifiée"}</Text>
+                <Text style={styles.cardPrice}>{item.prix} {item.currency || 'FCFA'} {t('landlordHome.perMonth')}</Text>
+                <Text style={styles.cardAddress} numberOfLines={1}>📍 {item.localisation?.adresse || t('landlordHome.addressNotSpecified')}</Text>
                 
                 <TouchableOpacity 
                   style={styles.contactBtn}
                   onPress={() => handleContact(item.telephoneProprietaire || item.telephone, item.titre)}
                 >
-                  <Text style={styles.contactBtnText}>Contacter le propriétaire</Text>
+                  <Text style={styles.contactBtnText}>{t('studentHome.contactOwner')}</Text>
                 </TouchableOpacity>
               </View>
             </TouchableOpacity>

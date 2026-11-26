@@ -1,5 +1,22 @@
 import { collection, doc, setDoc } from 'firebase/firestore';
 import { db } from '../config/firebase';
+import {
+  PANAFRICAN_DATA,
+  getAvailableCountries,
+  getCountryData,
+  getVillesByCountry,
+  getUniversitesByCountryAndVille,
+  getAllUniversitesByCountry,
+} from './panAfricanUniversities';
+
+export {
+  PANAFRICAN_DATA,
+  getAvailableCountries,
+  getCountryData,
+  getVillesByCountry,
+  getUniversitesByCountryAndVille,
+  getAllUniversitesByCountry,
+};
 
 /**
  * RÉGIONS ADMINISTRATIVES DU SÉNÉGAL ET LEURS VILLES UNIVERSITAIRES
@@ -562,31 +579,65 @@ export const isPropertyInZone = (bien, zoneId) => {
 /**
  * Obtenir la région correspondant à un identifiant
  */
-export const getRegionById = (regionId) => {
-  return SENEGAL_REGIONS.find((r) => r.id === regionId) || SENEGAL_REGIONS[0];
+export const getRegionById = (regionId, countryId = 'SN') => {
+  const regions = getCitiesForCountry(countryId);
+  return regions.find((r) => r.id === regionId) || regions[0] || SENEGAL_REGIONS[0];
 };
 
 /**
- * Obtenir toutes les universités d'une région
+ * Obtenir toutes les universités d'une région / ville
  */
-export const getUniversitesByRegion = (regionId) => {
-  if (!regionId || regionId === 'TOUS') return UNIVERSITES;
-  return UNIVERSITES.filter((uni) => uni.regionId === regionId || (uni.zones && uni.zones.includes(regionId)));
+export const getUniversitesByRegion = (regionId, countryId = 'SN') => {
+  if (!regionId || regionId === 'TOUS') return getUniversitiesForCountry(countryId);
+  const code = String(countryId || 'SN').toUpperCase().trim();
+  if (code === 'SN') {
+    return UNIVERSITES.filter((uni) => uni.regionId === regionId || (uni.zones && uni.zones.includes(regionId)));
+  }
+  const countryVilles = getVillesByCountry(code);
+  const targetVille = countryVilles.find(v => v.id === regionId);
+  return targetVille ? (targetVille.universites || []) : [];
 };
 
 /**
  * Obtenir toutes les universités associées à une ville précise
  */
-export const getUniversitesByVille = (villeId) => {
-  if (!villeId) return UNIVERSITES;
-  return UNIVERSITES.filter((uni) => uni.villes && uni.villes.includes(villeId));
+export const getUniversitesByVille = (villeId, countryId = 'SN') => {
+  if (!villeId) return getUniversitiesForCountry(countryId);
+  const code = String(countryId || 'SN').toUpperCase().trim();
+  if (code === 'SN') {
+    return UNIVERSITES.filter((uni) => uni.villes && uni.villes.includes(villeId));
+  }
+  const countryVilles = getVillesByCountry(code);
+  const targetVille = countryVilles.find(v => v.id === villeId);
+  return targetVille ? (targetVille.universites || []) : [];
 };
 
 /**
- * Trouver une université par son identifiant
+ * Trouver une université par son identifiant (Sénégal et Panafricain)
  */
-export const getUniversityById = (uniId) => {
-  return UNIVERSITES.find((u) => u.id === uniId) || UNIVERSITES[0];
+export const getUniversityById = (uniId, countryId = null) => {
+  if (!uniId) return UNIVERSITES[0];
+  const foundSenegal = UNIVERSITES.find(u => u.id === uniId || u.nom === uniId);
+  if (foundSenegal) return foundSenegal;
+
+  if (countryId) {
+    const countryUnis = getAllUniversitesByCountry(countryId);
+    const found = countryUnis.find(u => u.id === uniId || u.nom === uniId);
+    if (found) return found;
+  }
+
+  for (const cData of Object.values(PANAFRICAN_DATA)) {
+    if (cData.villes) {
+      for (const v of cData.villes) {
+        if (v.universites) {
+          const match = v.universites.find(u => u.id === uniId || u.nom === uniId);
+          if (match) return { ...match, villeId: v.id, villeNom: v.nom };
+        }
+      }
+    }
+  }
+
+  return { id: uniId, nom: uniId, nomComplet: uniId, ville: '', zones: [] };
 };
 
 /**
@@ -628,4 +679,45 @@ export const uploadUniversitiesToFirebase = async () => {
     console.warn("Synchronisation Firestore optionnelle non autorisée :", error?.message || error);
     return { success: false, error: error?.message };
   }
+};
+
+/**
+ * Obtenir la liste unifiée des universités pour un pays donné
+ * Si 'SN' (Sénégal), renvoie la liste officielle complète UNIVERSITES.
+ * Pour tout autre pays d'Afrique, renvoie les universités issues de panAfricanUniversities.
+ */
+export const getUniversitiesForCountry = (countryId = 'SN') => {
+  const code = String(countryId || 'SN').toUpperCase().trim();
+  if (code === 'SN') {
+    return UNIVERSITES;
+  }
+  const panUnis = getAllUniversitesByCountry(code);
+  return panUnis.map(u => ({
+    id: u.id,
+    nom: `${u.nom} (${u.villeNom || ''})`.trim(),
+    nomComplet: u.nomComplet || u.nom,
+    ville: u.villeNom || '',
+    zones: u.zones || [],
+    type: 'Public / Privé',
+  }));
+};
+
+/**
+ * Obtenir la liste unifiée des régions / villes d'un pays
+ */
+export const getCitiesForCountry = (countryId = 'SN') => {
+  const code = String(countryId || 'SN').toUpperCase().trim();
+  if (code === 'SN') {
+    return SENEGAL_REGIONS;
+  }
+  const panVilles = getVillesByCountry(code);
+  return panVilles.map(v => ({
+    id: v.id,
+    nom: v.nom,
+    description: v.description || v.nom,
+    villes: [{ id: v.id, nom: v.nom }],
+    defaultUni: v.universites?.[0]?.id || '',
+    defaultVille: v.id,
+    universites: v.universites || [],
+  }));
 };

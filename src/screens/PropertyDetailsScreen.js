@@ -22,6 +22,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { WebView } from 'react-native-webview';
 import { collection, addDoc, getDocs, doc, setDoc, deleteDoc, getDoc, query, orderBy, where, serverTimestamp } from 'firebase/firestore';
 import { db, auth } from '../config/firebase';
+import { useTranslation } from '../i18n';
 
 const { width } = Dimensions.get('window');
 
@@ -56,6 +57,7 @@ const MOTIFS_SIGNALEMENT = [
 ];
 
 export default function PropertyDetailsScreen({ route, navigation }) {
+  const { t } = useTranslation();
   const { property } = route.params;
 
   const [reviews, setReviews] = useState([]);
@@ -392,7 +394,7 @@ export default function PropertyDetailsScreen({ route, navigation }) {
           hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
         >
           <Ionicons name="arrow-back" size={22} color="#003880" />
-          <Text style={styles.navBackText}>Retour</Text>
+          <Text style={styles.navBackText}>{t('common.back')}</Text>
         </TouchableOpacity>
 
         <TouchableOpacity 
@@ -464,7 +466,9 @@ export default function PropertyDetailsScreen({ route, navigation }) {
 
           <View style={[styles.badgePill, { backgroundColor: '#F1F5F9', borderColor: '#E2E8F0' }]}>
             <Ionicons name="home-outline" size={13} color="#475569" style={{ marginRight: 3 }} />
-            <Text style={[styles.badgeText, { color: '#475569' }]}>{property.type || "Logement"}</Text>
+            <Text style={[styles.badgeText, { color: '#475569' }]}>
+              {t(`landlordHome.types.${property.type}`) || property.type || "Logement"}
+            </Text>
           </View>
 
           <View style={[styles.badgePill, { backgroundColor: '#FEF3C7', borderColor: '#FDE68A' }]}>
@@ -480,9 +484,9 @@ export default function PropertyDetailsScreen({ route, navigation }) {
         
         <View style={styles.priceRow}>
           <Text style={styles.propertyPrice}>
-            {Number(property.prix || 0).toLocaleString()} FCFA
+            {Number(property.prix || 0).toLocaleString()} {property.currency || 'FCFA'}
           </Text>
-          <Text style={styles.period}> / mois</Text>
+          <Text style={styles.period}> {t('landlordHome.perMonth')}</Text>
         </View>
 
         {/* BOUTON MESSAGERIE INTERNE (BLEU ROYAL) */}
@@ -492,14 +496,14 @@ export default function PropertyDetailsScreen({ route, navigation }) {
           activeOpacity={0.85}
         >
           <Ionicons name="chatbubbles" size={18} color="#FFFFFF" style={{ marginRight: 8 }} />
-          <Text style={styles.internalChatButtonText}>Discuter en direct avec le propriétaire</Text>
+          <Text style={styles.internalChatButtonText}>{t('propertyDetails.internalChat')}</Text>
         </TouchableOpacity>
 
         {/* CARTE DESCRIPTION */}
         <View style={styles.sectionCard}>
           <View style={styles.sectionHeaderRow}>
             <Ionicons name="document-text-outline" size={18} color="#003880" style={{ marginRight: 6 }} />
-            <Text style={styles.sectionTitle}>Description</Text>
+            <Text style={styles.sectionTitle}>{t('propertyDetails.description')}</Text>
           </View>
           <Text style={styles.propertyDescription}>{property.description || "Aucune description fournie."}</Text>
         </View>
@@ -508,10 +512,10 @@ export default function PropertyDetailsScreen({ route, navigation }) {
         <View style={styles.sectionCard}>
           <View style={styles.sectionHeaderRow}>
             <Ionicons name="map-outline" size={18} color="#003880" style={{ marginRight: 6 }} />
-            <Text style={styles.sectionTitle}>Localisation</Text>
+            <Text style={styles.sectionTitle}>{t('propertyDetails.location')}</Text>
           </View>
           <Text style={styles.addressText}>
-            📍 {property.localisation?.region ? `${property.localisation.region} • ` : ''}{property.localisation?.ville ? `${property.localisation.ville} • ` : ''}{property.localisation?.adresse || "Adresse non spécifiée"}
+            📍 {property.localisation?.region ? `${property.localisation.region} • ` : ''}{property.localisation?.ville ? `${property.localisation.ville} • ` : ''}{property.localisation?.adresse || t('landlordHome.addressNotSpecified')}
           </Text>
           
           <TouchableOpacity 
@@ -527,8 +531,8 @@ export default function PropertyDetailsScreen({ route, navigation }) {
               <Ionicons name="navigate" size={22} color="#003880" />
             </View>
             <View style={{ flex: 1, marginLeft: 12 }}>
-              <Text style={styles.mapBtnTitle}>Ouvrir l'itinéraire sur Google Maps</Text>
-              <Text style={styles.mapBtnSubtitle}>Voir la distance exacte avec votre université</Text>
+              <Text style={styles.mapBtnTitle}>{t('propertyDetails.openMaps')}</Text>
+              <Text style={styles.mapBtnSubtitle}>{t('propertyDetails.mapsSubtitle')}</Text>
             </View>
             <Ionicons name="chevron-forward" size={18} color="#003880" />
           </TouchableOpacity>
@@ -538,15 +542,15 @@ export default function PropertyDetailsScreen({ route, navigation }) {
         <View style={styles.sectionCard}>
           <View style={styles.sectionHeaderRow}>
             <Ionicons name="chatbubble-ellipses-outline" size={18} color="#003880" style={{ marginRight: 6 }} />
-            <Text style={styles.sectionTitle}>Avis des étudiants ({reviews.length})</Text>
+            <Text style={styles.sectionTitle}>{t('propertyDetails.reviewsTitle', { count: reviews.length })}</Text>
           </View>
 
           <View style={styles.reviewForm}>
-            <Text style={styles.subLabel}>Donner votre avis :</Text>
+            <Text style={styles.subLabel}>{t('propertyDetails.giveReview')}</Text>
             <View style={styles.reviewInputRow}>
               <TextInput 
                 style={styles.ratingInput} 
-                placeholder="Note (1-5)" 
+                placeholder={t('propertyDetails.ratingPlaceholder')} 
                 placeholderTextColor="#94A3B8"
                 keyboardType="numeric"
                 value={newRating} 
@@ -555,7 +559,7 @@ export default function PropertyDetailsScreen({ route, navigation }) {
               />
               <TextInput 
                 style={styles.commentInput} 
-                placeholder="Logement propre et quartier calme..." 
+                placeholder={t('propertyDetails.commentPlaceholder')} 
                 placeholderTextColor="#94A3B8"
                 value={newComment} 
                 onChangeText={setNewComment} 
@@ -563,14 +567,14 @@ export default function PropertyDetailsScreen({ route, navigation }) {
               />
             </View>
             <TouchableOpacity style={styles.submitReviewBtn} onPress={handleAddReview}>
-              <Text style={styles.submitReviewText}>Publier mon avis</Text>
+              <Text style={styles.submitReviewText}>{t('propertyDetails.submitReview')}</Text>
             </TouchableOpacity>
           </View>
 
           {loadingReviews ? (
             <ActivityIndicator size="small" color="#003880" style={{ marginTop: 15 }} />
           ) : reviews.length === 0 ? (
-            <Text style={styles.noReviewsText}>Aucun avis pour l'instant. Soyez le premier étudiant à donner votre avis !</Text>
+            <Text style={styles.noReviewsText}>{t('propertyDetails.noReviews')}</Text>
           ) : (
             reviews.map((rev) => (
               <View key={rev.id} style={styles.reviewItem}>
@@ -593,7 +597,7 @@ export default function PropertyDetailsScreen({ route, navigation }) {
           activeOpacity={0.85}
         >
           <Ionicons name="logo-whatsapp" size={20} color="#FFFFFF" style={{ marginRight: 8 }} />
-          <Text style={styles.contactButtonText}>Contacter par WhatsApp / Téléphone</Text>
+          <Text style={styles.contactButtonText}>{t('propertyDetails.contactOwner')}</Text>
         </TouchableOpacity>
 
         {/* BOUTON SIGNALEMENT ARNAQUE */}
@@ -603,7 +607,7 @@ export default function PropertyDetailsScreen({ route, navigation }) {
           activeOpacity={0.8}
         >
           <Ionicons name="shield-outline" size={16} color="#DC2626" style={{ marginRight: 6 }} />
-          <Text style={styles.reportButtonText}>Signaler cette annonce (Suspicion d'arnaque)</Text>
+          <Text style={styles.reportButtonText}>{t('propertyDetails.reportListing')}</Text>
         </TouchableOpacity>
 
         <View style={{ height: 40 }} />
@@ -633,8 +637,8 @@ export default function PropertyDetailsScreen({ route, navigation }) {
                 <Ionicons name="shield-alert" size={24} color="#DC2626" />
               </View>
               <View style={{ flex: 1, marginLeft: 10 }}>
-                <Text style={styles.modalTitle}>Signaler cette annonce</Text>
-                <Text style={styles.modalSubtitle}>Aidez-nous à protéger les étudiants</Text>
+                <Text style={styles.modalTitle}>{t('propertyDetails.reportModalTitle')}</Text>
+                <Text style={styles.modalSubtitle}>{t('propertyDetails.reportModalSubtitle')}</Text>
               </View>
               <TouchableOpacity
                 onPress={() => setReportModalVisible(false)}
@@ -646,7 +650,7 @@ export default function PropertyDetailsScreen({ route, navigation }) {
             </View>
 
             <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
-              <Text style={styles.sectionLabel}>Quel est le motif du signalement ?</Text>
+              <Text style={styles.sectionLabel}>{t('propertyDetails.reportMotifPrompt')}</Text>
               
               {MOTIFS_SIGNALEMENT.map((m) => {
                 const isSelected = selectedMotif === m.label;
@@ -671,11 +675,11 @@ export default function PropertyDetailsScreen({ route, navigation }) {
               })}
 
               <Text style={[styles.sectionLabel, { marginTop: 14 }]}>
-                Précisions supplémentaires (facultatif) :
+                {t('propertyDetails.reportExtraDetails')}
               </Text>
               <TextInput
                 style={styles.reportTextInput}
-                placeholder="Ex : Le bailleur m'a demandé 40.000 FCFA sur Wave avant de visiter, ou le numéro n'appartient pas au propriétaire..."
+                placeholder={t('propertyDetails.reportPlaceholder')}
                 placeholderTextColor="#94A3B8"
                 value={reportDetails}
                 onChangeText={setReportDetails}
@@ -687,7 +691,7 @@ export default function PropertyDetailsScreen({ route, navigation }) {
               <View style={styles.adminNoticeBox}>
                 <Ionicons name="information-circle-outline" size={16} color="#003880" style={{ marginRight: 6 }} />
                 <Text style={styles.adminNoticeText}>
-                  Les informations complètes du profil bailleur seront automatiquement transmises à l'administrateur Logetudiant.
+                  {t('propertyDetails.adminNotice')}
                 </Text>
               </View>
 
@@ -702,7 +706,7 @@ export default function PropertyDetailsScreen({ route, navigation }) {
                 ) : (
                   <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                     <Ionicons name="shield-checkmark" size={18} color="#FFFFFF" style={{ marginRight: 6 }} />
-                    <Text style={styles.submitReportBtnText}>Envoyer le signalement</Text>
+                    <Text style={styles.submitReportBtnText}>{t('propertyDetails.submitReport')}</Text>
                   </View>
                 )}
               </TouchableOpacity>
@@ -711,7 +715,7 @@ export default function PropertyDetailsScreen({ route, navigation }) {
                 style={styles.cancelReportBtn}
                 onPress={() => setReportModalVisible(false)}
               >
-                <Text style={styles.cancelReportBtnText}>Annuler</Text>
+                <Text style={styles.cancelReportBtnText}>{t('propertyDetails.cancel')}</Text>
               </TouchableOpacity>
             </ScrollView>
           </View>

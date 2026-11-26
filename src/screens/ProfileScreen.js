@@ -18,8 +18,11 @@ import { doc, getDoc, updateDoc } from 'firebase/firestore';
 import { updatePassword } from 'firebase/auth';
 import { db, auth } from '../config/firebase';
 import { logoutUser } from '../services/authService';
+import LanguageSelectorCard, { LanguagePill } from '../components/LanguageSelector';
+import { useTranslation } from '../i18n';
 
 export default function ProfileScreen({ navigation }) {
+  const { t } = useTranslation();
   const [loading, setLoading] = useState(true);
   const [updating, setUpdating] = useState(false);
   
@@ -172,14 +175,14 @@ export default function ProfileScreen({ navigation }) {
       await updateDoc(userDocRef, updateData);
 
       Alert.alert(
-        "Succès ✨", 
+        t('common.success'), 
         role === 'admin' 
           ? "Votre profil administrateur a été mis à jour avec succès !" 
-          : "Vos informations personnelles ont été enregistrées avec succès !"
+          : t('profile.updateSuccess')
       );
     } catch (error) {
       console.error("Erreur mise à jour profil :", error);
-      Alert.alert("Erreur", "Impossible de mettre à jour le profil pour le moment.");
+      Alert.alert(t('common.error'), "Impossible de mettre à jour le profil pour le moment.");
     }
     setUpdating(false);
   };
@@ -190,12 +193,12 @@ export default function ProfileScreen({ navigation }) {
     const p2 = confirmPass.trim();
 
     if (p1.length !== 6) {
-      Alert.alert("Mot de passe invalide", "Le mot de passe doit comporter exactement 6 chiffres.");
+      Alert.alert(t('common.error'), t('profile.passMustBeSix'));
       return;
     }
 
     if (p1 !== p2) {
-      Alert.alert("Erreur", "Les deux mots de passe saisis ne sont pas identiques.");
+      Alert.alert(t('common.error'), t('profile.passMismatch'));
       return;
     }
 
@@ -203,7 +206,7 @@ export default function ProfileScreen({ navigation }) {
     try {
       const user = auth.currentUser;
       if (!user) {
-        Alert.alert("Session expirée", "Veuillez vous reconnecter.");
+        Alert.alert(t('common.error'), "Session expirée. Veuillez vous reconnecter.");
         return;
       }
 
@@ -216,7 +219,7 @@ export default function ProfileScreen({ navigation }) {
         });
       } catch (e) {}
 
-      Alert.alert("Succès 🎉", "Votre mot de passe a été modifié avec succès !");
+      Alert.alert(t('common.success'), t('profile.passChangedSuccess'));
       setPasswordModalVisible(false);
       setNewPass('');
       setConfirmPass('');
@@ -228,7 +231,7 @@ export default function ProfileScreen({ navigation }) {
           "Pour changer votre mot de passe, veuillez vous reconnecter avec votre numéro avant de réessayer."
         );
       } else {
-        Alert.alert("Erreur", "Impossible de mettre à jour le mot de passe pour le moment.");
+        Alert.alert(t('common.error'), "Impossible de mettre à jour le mot de passe pour le moment.");
       }
     } finally {
       setSavingPass(false);
@@ -238,12 +241,12 @@ export default function ProfileScreen({ navigation }) {
   // Gestion de la déconnexion
   const handleLogout = async () => {
     Alert.alert(
-      "Déconnexion",
-      "Voulez-vous vraiment vous déconnecter de votre compte ?",
+      t('common.logoutTitle'),
+      t('common.logoutConfirm'),
       [
-        { text: "Annuler", style: "cancel" },
+        { text: t('common.cancel'), style: "cancel" },
         {
-          text: "Se déconnecter",
+          text: t('common.logout'),
           style: "destructive",
           onPress: async () => {
             try {
@@ -279,19 +282,22 @@ export default function ProfileScreen({ navigation }) {
 
   return (
     <ScrollView contentContainerStyle={styles.container}>
-      {/* BARRE DE RETOUR */}
+      {/* BARRE DE RETOUR ET RACCOURCI LANGUE */}
       <View style={styles.topNavRow}>
         <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
           <Ionicons name="arrow-back" size={20} color="#003880" style={{ marginRight: 4 }} />
-          <Text style={styles.backButtonText}>Retour</Text>
+          <Text style={styles.backButtonText}>{t('common.back')}</Text>
         </TouchableOpacity>
         
-        {isAdmin && (
-          <View style={styles.adminMiniTag}>
-            <Ionicons name="shield-checkmark" size={13} color="#E8A008" style={{ marginRight: 4 }} />
-            <Text style={styles.adminMiniTagText}>Panneau Admin</Text>
-          </View>
-        )}
+        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+          {isAdmin && (
+            <View style={[styles.adminMiniTag, { marginRight: 8 }]}>
+              <Ionicons name="shield-checkmark" size={13} color="#E8A008" style={{ marginRight: 4 }} />
+              <Text style={styles.adminMiniTagText}>{t('profile.adminPanel')}</Text>
+            </View>
+          )}
+          <LanguagePill />
+        </View>
       </View>
 
       {/* CARTE PRINCIPALE DU PROFIL */}
@@ -331,7 +337,7 @@ export default function ProfileScreen({ navigation }) {
             isAdmin && { color: '#003880' },
             isBailleur && { color: '#92400E' },
           ]}>
-            {isAdmin ? '🛡️ Administrateur Système' : (isBailleur ? '🏢 Propriétaire Bailleur' : '👨‍🎓 Compte Étudiant')}
+            {isAdmin ? t('profile.adminRole') : (isBailleur ? t('profile.landlordRole') : t('profile.studentRole'))}
           </Text>
         </View>
 
@@ -340,16 +346,16 @@ export default function ProfileScreen({ navigation }) {
           <View style={styles.adminNoticeBox}>
             <Ionicons name="lock-closed" size={16} color="#003880" style={{ marginRight: 6 }} />
             <Text style={styles.adminNoticeText}>
-              Ce compte dispose des autorisations complètes sur la modération des logements et la sécurité de Logetudiant.
+              {t('profile.adminNotice')}
             </Text>
           </View>
         )}
 
         {/* CHAMP NOM */}
-        <Text style={styles.label}>Nom complet</Text>
+        <Text style={styles.label}>{t('profile.fullNameLabel')}</Text>
         <TextInput 
           style={styles.input} 
-          placeholder="Votre prénom et nom" 
+          placeholder={t('profile.fullNamePlaceholder')} 
           placeholderTextColor="#A0AEC0"
           value={nom} 
           onChangeText={setNom} 
@@ -357,10 +363,10 @@ export default function ProfileScreen({ navigation }) {
         />
 
         {/* CHAMP TÉLÉPHONE */}
-        <Text style={styles.label}>Numéro de téléphone</Text>
+        <Text style={styles.label}>{t('profile.phoneLabel')}</Text>
         <TextInput 
           style={styles.input} 
-          placeholder="Numéro de téléphone" 
+          placeholder={t('profile.phoneLabel')} 
           placeholderTextColor="#A0AEC0"
           keyboardType="numeric"
           maxLength={9}
@@ -371,10 +377,10 @@ export default function ProfileScreen({ navigation }) {
         {/* CHAMP SELON LE RÔLE */}
         {isAdmin ? (
           <>
-            <Text style={styles.label}>Fonction / Rôle administratif</Text>
+            <Text style={styles.label}>{t('profile.adminFunctionLabel')}</Text>
             <TextInput 
               style={styles.input} 
-              placeholder="Super-Administrateur, Responsable Sécurité..." 
+              placeholder={t('profile.adminFunctionPlaceholder')} 
               placeholderTextColor="#A0AEC0"
               value={fonction} 
               onChangeText={setFonction} 
@@ -383,10 +389,10 @@ export default function ProfileScreen({ navigation }) {
           </>
         ) : (
           <>
-            <Text style={styles.label}>Université / Campus principal</Text>
+            <Text style={styles.label}>{t('profile.universityLabel')}</Text>
             <TextInput 
               style={styles.input} 
-              placeholder="UCAD, UGB, UIDT..." 
+              placeholder={t('profile.universityPlaceholder')} 
               placeholderTextColor="#A0AEC0"
               value={universite} 
               onChangeText={setUniversite} 
@@ -404,11 +410,11 @@ export default function ProfileScreen({ navigation }) {
           {updating ? (
             <ActivityIndicator color="#fff" />
           ) : (
-            <Text style={styles.saveButtonText}>💾 Enregistrer les modifications</Text>
+            <Text style={styles.saveButtonText}>{t('profile.saveChanges')}</Text>
           )}
         </TouchableOpacity>
 
-                {/* ACCÈS DIRECT À L'ABONNEMENT BAILLEUR PRO */}
+        {/* ACCÈS DIRECT À L'ABONNEMENT BAILLEUR PRO */}
         {isBailleur && (
           <TouchableOpacity 
             style={[styles.saveButton, { backgroundColor: '#002855', marginTop: 10, borderColor: '#002855' }]} 
@@ -417,7 +423,7 @@ export default function ProfileScreen({ navigation }) {
           >
             <View style={{ flexDirection: 'row', alignItems: 'center' }}>
               <Ionicons name="sparkles" size={18} color="#FBBF24" style={{ marginRight: 8 }} />
-              <Text style={styles.saveButtonText}>👑 Gérer mon Abonnement Bailleur Pro</Text>
+              <Text style={styles.saveButtonText}>{t('profile.manageSubscription')}</Text>
             </View>
           </TouchableOpacity>
         )}
@@ -430,7 +436,7 @@ export default function ProfileScreen({ navigation }) {
           >
             <View style={{ flexDirection: 'row', alignItems: 'center' }}>
               <Ionicons name="speedometer-outline" size={18} color="#fff" style={{ marginRight: 6 }} />
-              <Text style={styles.saveButtonText}>📊 Tableau de Bord Administrateur</Text>
+              <Text style={styles.saveButtonText}>{t('profile.adminDashboard')}</Text>
             </View>
           </TouchableOpacity>
         )}
@@ -448,15 +454,18 @@ export default function ProfileScreen({ navigation }) {
           activeOpacity={0.8}
         >
           <Ionicons name="key-outline" size={18} color="#003880" style={{ marginRight: 6 }} />
-          <Text style={styles.passwordBtnText}>Changer mon mot de passe</Text>
+          <Text style={styles.passwordBtnText}>{t('profile.changePassword')}</Text>
         </TouchableOpacity>
 
       </View>
 
+      {/* SÉLECTEUR DE LANGUE OFFICIEL (PLEINE LARGEUR ET DESIGN MODERNE) */}
+      <LanguageSelectorCard style={{ marginBottom: 16 }} />
+
       {/* BOUTON DÉCONNEXION */}
       <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
         <Ionicons name="log-out-outline" size={18} color="#9B2C2C" style={{ marginRight: 6 }} />
-        <Text style={styles.logoutButtonText}>Se déconnecter</Text>
+        <Text style={styles.logoutButtonText}>{t('profile.logoutBtn')}</Text>
       </TouchableOpacity>
 
       {/* MODALE DE MODIFICATION DU MOT DE PASSE SANS AUCUN EMAIL */}
@@ -498,9 +507,9 @@ export default function ProfileScreen({ navigation }) {
                 </TouchableOpacity>
               </View>
 
-              <Text style={styles.modalTitle}>Modifier mon mot de passe</Text>
+              <Text style={styles.modalTitle}>{t('profile.modalChangePassTitle')}</Text>
               <Text style={styles.modalDesc}>
-                Saisissez votre nouveau mot de passe à <Text style={{ fontWeight: 'bold' }}>6 chiffres</Text> pour sécuriser votre compte.
+                {t('profile.modalChangePassDesc')}
               </Text>
 
               {/* CHAMP NOUVEAU MOT DE PASSE */}
@@ -508,7 +517,7 @@ export default function ProfileScreen({ navigation }) {
                 <Ionicons name="key-outline" size={19} color="#003880" style={{ marginRight: 8 }} />
                 <TextInput 
                   style={styles.modalInputField}
-                  placeholder="Nouveau mot de passe (6 chiffres)"
+                  placeholder={t('profile.newPassPlaceholder')}
                   placeholderTextColor="#94A3B8"
                   value={newPass}
                   onChangeText={setNewPass}
@@ -526,7 +535,7 @@ export default function ProfileScreen({ navigation }) {
                 <Ionicons name="shield-checkmark-outline" size={19} color="#003880" style={{ marginRight: 8 }} />
                 <TextInput 
                   style={styles.modalInputField}
-                  placeholder="Confirmer les 6 chiffres"
+                  placeholder={t('profile.confirmPassPlaceholder')}
                   placeholderTextColor="#94A3B8"
                   value={confirmPass}
                   onChangeText={setConfirmPass}
@@ -545,7 +554,7 @@ export default function ProfileScreen({ navigation }) {
                 {savingPass ? (
                   <ActivityIndicator color="#fff" />
                 ) : (
-                  <Text style={styles.modalActionBtnText}>Valider mon nouveau mot de passe</Text>
+                  <Text style={styles.modalActionBtnText}>{t('profile.saveNewPass')}</Text>
                 )}
               </TouchableOpacity>
 
@@ -553,7 +562,7 @@ export default function ProfileScreen({ navigation }) {
                 style={styles.modalCancelBtn}
                 onPress={() => setPasswordModalVisible(false)}
               >
-                <Text style={styles.modalCancelBtnText}>Annuler</Text>
+                <Text style={styles.modalCancelBtnText}>{t('common.cancel')}</Text>
               </TouchableOpacity>
             </ScrollView>
           </View>

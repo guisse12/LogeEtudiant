@@ -3,21 +3,22 @@ import { doc, getDoc, updateDoc, Timestamp } from 'firebase/firestore';
 
 /**
  * Service de gestion des abonnements Bailleurs Logetudiant
- * Grille tarifaire :
+ * Grille tarifaire officielle :
  * - Essai : 30 jours gratuits dès l'inscription
- * - 1 Mois : 1 000 FCFA
- * - 3 Mois : 2 500 FCFA (Économie 500 FCFA)
- * - 6 Mois : 5 000 FCFA (1 mois offert, économie 1 000 FCFA)
+ * - 1 Mois : 1 500 FCFA
+ * - 3 Mois : 3 500 FCFA (~1 166 FCFA/mois, Économie 1 000 FCFA)
+ * - 6 Mois : 6 000 FCFA (1 000 FCFA/mois, 2 mois offerts, Économie 3 000 FCFA)
+ * - 1 An : 10 000 FCFA (~833 FCFA/mois, 5 mois offerts, Économie 8 000 FCFA)
  */
 
 export const SUBSCRIPTION_PLANS = [
   {
     id: 'plan_1_month',
-    name: 'Pack 1 Mois',
+    name: 'Pack 1 Mois (Découverte)',
     durationDays: 30,
-    price: 1000,
-    priceFormatted: '1 000 FCFA',
-    perMonthText: '1 000 FCFA / mois',
+    price: 1500,
+    priceFormatted: '1 500 FCFA',
+    perMonthText: '1 500 FCFA / mois',
     badge: null,
     savings: null,
     description: 'Idéal pour louer une chambre ou un studio rapidement.',
@@ -26,11 +27,11 @@ export const SUBSCRIPTION_PLANS = [
     id: 'plan_3_months',
     name: 'Pack 3 Mois (Trimestre)',
     durationDays: 90,
-    price: 2500,
-    priceFormatted: '2 500 FCFA',
-    perMonthText: '~833 FCFA / mois',
+    price: 3500,
+    priceFormatted: '3 500 FCFA',
+    perMonthText: '~1 166 FCFA / mois',
     badge: 'LE PLUS POPULAIRE ⭐',
-    savings: 'Économisez 500 FCFA',
+    savings: 'Économisez 1 000 FCFA',
     description: 'Visibilité garantie pendant tout le semestre universitaire.',
     popular: true,
   },
@@ -38,13 +39,25 @@ export const SUBSCRIPTION_PLANS = [
     id: 'plan_6_months',
     name: 'Pack 6 Mois (Semestre)',
     durationDays: 180,
-    price: 5000,
-    priceFormatted: '5 000 FCFA',
-    perMonthText: '~833 FCFA / mois',
+    price: 6000,
+    priceFormatted: '6 000 FCFA',
+    perMonthText: '1 000 FCFA / mois',
     badge: 'MEILLEURE OFFRE 🔥',
-    savings: '1 mois offert (Éco. 1 000 FCFA)',
-    description: 'Tranquillité totale pour toute l\'année académique.',
+    savings: '2 mois offerts (Éco. 3 000 FCFA)',
+    description: 'Tranquillité totale et priorité maximale sur les recherches.',
     bestValue: true,
+  },
+  {
+    id: 'plan_12_months',
+    name: 'Pack 1 An (Annuel Privilège)',
+    durationDays: 365,
+    price: 10000,
+    priceFormatted: '10 000 FCFA',
+    perMonthText: '~833 FCFA / mois',
+    badge: 'PRIVILÈGE ANNUEL 👑',
+    savings: '5 mois offerts (Éco. 8 000 FCFA)',
+    description: '1 an de publications illimitées et badge certifié permanent.',
+    annual: true,
   },
 ];
 

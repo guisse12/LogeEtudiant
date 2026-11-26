@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { 
   StyleSheet, 
   Text, 
@@ -17,21 +17,36 @@ import { Ionicons } from '@expo/vector-icons';
 import { collection, addDoc, doc, getDoc, updateDoc, serverTimestamp } from 'firebase/firestore';
 import { db, auth } from '../config/firebase';
 import { formatCleanFullName } from '../utils/nameFormatter';
-import { UNIVERSITES } from '../services/universityService';
+import { UNIVERSITES, getUniversitiesForCountry } from '../services/universityService';
+import { DEFAULT_COUNTRY, getCountryById } from '../services/countryService';
+import CountryPickerModal, { CountryPickerButton } from '../components/CountryPickerModal';
 import { broadcastNotification } from '../services/notificationService';
+import { useTranslation } from '../i18n';
 
 export default function AjouterColocAnnonceScreen({ navigation, route }) {
+  const { t } = useTranslation();
   const annonceToEdit = route?.params?.annonceToEdit;
   const isEditing = !!annonceToEdit;
 
+  const [selectedCountry, setSelectedCountry] = useState(DEFAULT_COUNTRY);
+  const [countryModalVisible, setCountryModalVisible] = useState(false);
   const [universiteId, setUniversiteId] = useState('UCAD');
   const [budgetMax, setBudgetMax] = useState('');
   const [telephone, setTelephone] = useState('');
   const [description, setDescription] = useState('');
   const [loading, setLoading] = useState(false);
 
+  const availableUnis = useMemo(() => {
+    return (selectedCountry?.id === 'SN' || !selectedCountry)
+      ? UNIVERSITES
+      : getUniversitiesForCountry(selectedCountry?.id);
+  }, [selectedCountry]);
+
   useEffect(() => {
     if (annonceToEdit) {
+      if (annonceToEdit.countryId) {
+        setSelectedCountry(getCountryById(annonceToEdit.countryId));
+      }
       setUniversiteId(annonceToEdit.universiteId || 'UCAD');
       setBudgetMax(String(annonceToEdit.budgetMax || ''));
       setTelephone(annonceToEdit.telephone || '');
@@ -59,14 +74,18 @@ export default function AjouterColocAnnonceScreen({ navigation, route }) {
     const cleanBudget = budgetMax.trim();
     const cleanPhone = telephone.replace(/[^0-9]/g, '');
     const cleanDesc = description.trim();
+    const requiredLen = selectedCountry.phoneLength || 9;
 
     if (!cleanBudget || !cleanPhone || !cleanDesc) {
       Alert.alert("Champs manquants", "Veuillez renseigner votre budget, votre numéro WhatsApp et la description.");
       return;
     }
 
-    if (cleanPhone.length !== 9) {
-      Alert.alert("Numéro invalide", "Le numéro WhatsApp doit comporter exactement 9 chiffres (ex: 771234567).");
+    if (cleanPhone.length !== requiredLen) {
+      Alert.alert(
+        "Numéro invalide", 
+        `Le numéro WhatsApp pour ${selectedCountry.name} doit comporter exactement ${requiredLen} chiffres (ex: ${selectedCountry.samplePhone || ''}).`
+      );
       return;
     }
 
@@ -87,6 +106,10 @@ export default function AjouterColocAnnonceScreen({ navigation, route }) {
       if (isEditing) {
         const docRef = doc(db, "coloc_annonces", annonceToEdit.id);
         await updateDoc(docRef, {
+          countryId: selectedCountry.id,
+          countryNom: selectedCountry.name,
+          currency: selectedCountry.currency,
+          dialCode: selectedCountry.dialCode,
           universiteId: universiteId,
           budgetMax: budgetNum,
           telephone: cleanPhone,
@@ -113,6 +136,10 @@ export default function AjouterColocAnnonceScreen({ navigation, route }) {
         await addDoc(collection(db, "coloc_annonces"), {
           etudiantId: auth.currentUser.uid,
           nomEtudiant: userName,
+          countryId: selectedCountry.id,
+          countryNom: selectedCountry.name,
+          currency: selectedCountry.currency,
+          dialCode: selectedCountry.dialCode,
           universiteId: universiteId,
           budgetMax: budgetNum,
           telephone: cleanPhone,
@@ -123,17 +150,17 @@ export default function AjouterColocAnnonceScreen({ navigation, route }) {
         // Notification automatique diffusée aux étudiants
         broadcastNotification({
           title: "Nouvelle recherche de colocation 👥",
-          body: `${userName} cherche un colocataire (${universiteId}) - Budget max : ${budgetNum} FCFA.`,
+          body: `${userName} cherche un colocataire (${universiteId}) - Budget max : ${budgetNum} ${selectedCountry.currency || 'FCFA'}.`,
           type: 'new_coloc',
-          data: { universiteId }
+          data: { universiteId, countryId: selectedCountry.id }
         }).catch(() => {});
 
-        Alert.alert("Succès", "Votre annonce de colocation a été publiée avec succès !");
+        Alert.alert(t('common.success'), isEditing ? t('coloc.updateSuccess') : t('coloc.publishSuccess'));
         navigation.goBack();
       }
     } catch (error) {
       console.error("Erreur enregistrement annonce colocation :", error);
-      Alert.alert("Erreur technique", "Impossible d'enregistrer l'annonce pour le moment.");
+      Alert.alert(t('common.error'), "Impossible d'enregistrer l'annonce pour le moment.");
     } finally {
       setLoading(false);
     }
@@ -152,7 +179,7 @@ export default function AjouterColocAnnonceScreen({ navigation, route }) {
         >
           <Ionicons name="arrow-back" size={22} color="#003880" />
         </TouchableOpacity>
-        <Text style={styles.navTitle}>{isEditing ? "Modifier l'annonce" : "Nouvelle Colocation"}</Text>
+        <Text style={styles.navTitle}>{isEditing ? t('coloc.editTitle') : t('coloc.newTitle')}</Text>
         <View style={{ width: 28 }} />
       </View>
 
@@ -167,14 +194,21 @@ export default function AjouterColocAnnonceScreen({ navigation, route }) {
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode="on-drag"
         >
-          <Text style={styles.title}>{isEditing ? "Modifier mon annonce" : "Publier une recherche"}</Text>
+          <Text style={styles.title}>{isEditing ? t('coloc.editScreenTitle') : t('coloc.newScreenTitle')}</Text>
           <Text style={styles.subtitle}>
-            {isEditing ? "Mettez à jour vos critères pour trouver le colocataire idéal" : "Trouvez un camarade pour partager votre futur logement"}
+            {isEditing ? t('coloc.editScreenSubtitle') : t('coloc.newScreenSubtitle')}
           </Text>
 
-          <Text style={styles.label}>Zone / Université cible :</Text>
+          <Text style={styles.label}>{t('coloc.targetCountryUni')}</Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 10 }}>
+            <CountryPickerButton
+              selectedCountry={selectedCountry}
+              onPress={() => setCountryModalVisible(true)}
+            />
+            <Text style={{ fontSize: 13, color: '#64748B', fontWeight: '600' }}>{selectedCountry.name}</Text>
+          </View>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.uniContainer}>
-            {UNIVERSITES.map((uni) => (
+            {availableUnis.map((uni) => (
               <TouchableOpacity
                 key={uni.id}
                 style={[styles.uniChip, universiteId === uni.id && styles.uniChipSelected]}
@@ -182,38 +216,44 @@ export default function AjouterColocAnnonceScreen({ navigation, route }) {
                 activeOpacity={0.8}
               >
                 <Text style={[styles.uniText, universiteId === uni.id && styles.uniTextSelected]}>
-                  {uni.id} ({uni.ville})
+                  {uni.nom || uni.id}
                 </Text>
               </TouchableOpacity>
             ))}
           </ScrollView>
 
-          <Text style={styles.label}>Votre budget maximum (FCFA) :</Text>
+          <Text style={styles.label}>{t('coloc.maxBudgetLabel', { currency: selectedCountry.currency || 'FCFA' })}</Text>
           <TextInput 
             style={styles.input}
-            placeholder="35000"
+            placeholder={t('coloc.budgetPlaceholder', { currency: selectedCountry.currency || 'FCFA' })}
             placeholderTextColor="#94A3B8"
             keyboardType="numeric"
-            maxLength={7}
+            maxLength={10}
             value={budgetMax}
             onChangeText={setBudgetMax}
           />
 
-          <Text style={styles.label}>Numéro WhatsApp (9 chiffres) :</Text>
-          <TextInput 
-            style={styles.input}
-            placeholder="770000000"
-            placeholderTextColor="#94A3B8"
-            keyboardType="numeric"
-            maxLength={9}
-            value={telephone}
-            onChangeText={setTelephone}
-          />
+          <Text style={styles.label}>{t('coloc.whatsappLabel', { dialCode: selectedCountry.dialCode })}</Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 16 }}>
+            <CountryPickerButton
+              selectedCountry={selectedCountry}
+              onPress={() => setCountryModalVisible(true)}
+            />
+            <TextInput 
+              style={[styles.input, { flex: 1, marginBottom: 0 }]}
+              placeholder={selectedCountry.samplePhone || "Numéro WhatsApp"}
+              placeholderTextColor="#94A3B8"
+              keyboardType="numeric"
+              maxLength={selectedCountry.phoneLength || 10}
+              value={telephone}
+              onChangeText={setTelephone}
+            />
+          </View>
 
-          <Text style={styles.label}>Description & Critères de colocation :</Text>
+          <Text style={styles.label}>{t('coloc.descLabel')}</Text>
           <TextInput 
             style={[styles.input, styles.textArea]}
-            placeholder="Décrivez vos critères (ex: Je cherche un colocataire calme, proche campus, partage électricité et wifi...)"
+            placeholder={t('coloc.descPlaceholder')}
             placeholderTextColor="#94A3B8"
             multiline
             numberOfLines={4}
@@ -234,13 +274,27 @@ export default function AjouterColocAnnonceScreen({ navigation, route }) {
               <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}>
                 <Ionicons name="checkmark-circle-outline" size={18} color="#FFF" style={{ marginRight: 6 }} />
                 <Text style={styles.submitButtonText}>
-                  {isEditing ? "Enregistrer les modifications" : "Publier l'annonce"}
+                  {isEditing ? t('coloc.saveChanges') : t('coloc.publishListing')}
                 </Text>
               </View>
             )}
           </TouchableOpacity>
         </ScrollView>
       </KeyboardAvoidingView>
+
+      {/* SÉLECTEUR DE PAYS AFRICAINS */}
+      <CountryPickerModal
+        visible={countryModalVisible}
+        onClose={() => setCountryModalVisible(false)}
+        onSelectCountry={(country) => {
+          setSelectedCountry(country);
+          const unis = country.id === 'SN' ? UNIVERSITES : getUniversitiesForCountry(country.id);
+          if (unis && unis.length > 0) {
+            setUniversiteId(unis[0].id);
+          }
+        }}
+        selectedCountry={selectedCountry}
+      />
     </SafeAreaView>
   );
 }

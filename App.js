@@ -20,13 +20,15 @@ import AjouterColocAnnonceScreen from './src/screens/AjouterColocAnnonceScreen';
 import FavorisScreen from './src/screens/FavorisScreen';
 import NotificationsScreen from './src/screens/NotificationsScreen';
 import SubscriptionScreen from './src/screens/SubscriptionScreen';
+import { LanguageProvider } from './src/i18n';
 
 const Stack = createNativeStackNavigator();
 
 export default function App() {
   return (
-    <NavigationContainer>
-      <Stack.Navigator initialRouteName="Login" screenOptions={{ headerShown: false }}>
+    <LanguageProvider>
+      <NavigationContainer>
+        <Stack.Navigator initialRouteName="Login" screenOptions={{ headerShown: false }}>
         <Stack.Screen name="Login" component={LoginScreen} />
         <Stack.Screen name="Register" component={RegisterScreen} />
         <Stack.Screen name="EtudiantHome" component={EtudiantHomeScreen} />
@@ -100,5 +102,6 @@ export default function App() {
         />
       </Stack.Navigator>
     </NavigationContainer>
+    </LanguageProvider>
   );
 }

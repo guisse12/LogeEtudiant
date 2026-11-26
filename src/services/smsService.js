@@ -1,3 +1,4 @@
+import { formatAfricanPhone } from './countryService';
 /**
  * Service d'envoi de SMS réels pour Logetudiant Sénégal
  * Permet l'envoi de vrais SMS vers l'application Messages du téléphone
@@ -46,7 +47,10 @@ export const SMS_CONFIG = {
 /**
  * Formate un numéro sénégalais au format international (+221XXXXXXXXX)
  */
-export const formatSenegalPhone = (phone) => {
+export const formatSenegalPhone = (phone, dialCode = "+221") => {
+  return formatAfricanPhone(phone, dialCode);
+};
+export const formatSenegalPhoneLegacy = (phone) => {
   if (!phone) return '';
   const digits = String(phone).replace(/[^0-9]/g, '');
 
@@ -65,8 +69,8 @@ export const formatSenegalPhone = (phone) => {
  * @param {string} codeOrMessage - Code à 6 chiffres ou texte personnalisé
  * @param {string} type - 'inscription' | 'recuperation' | 'bailleur_valide' | 'bailleur_rejete' | 'custom'
  */
-export const sendRealSms = async (phone, codeOrMessage, type = 'inscription') => {
-  const formattedPhone = formatSenegalPhone(phone);
+export const sendRealSms = async (phone, codeOrMessage, type = 'inscription', dialCode = '+221') => {
+  const formattedPhone = formatSenegalPhone(phone, dialCode);
   const plainPhoneWithoutPlus = formattedPhone.replace('+', '');
   
   let messageBody = '';

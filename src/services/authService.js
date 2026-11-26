@@ -19,6 +19,7 @@ import {
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { auth, db } from "../config/firebase";
 import { sendRealSms } from "./smsService";
+import { AFRICAN_COUNTRIES, DEFAULT_COUNTRY } from "./countryService";
 
 // Table de correspondance d'urgence (Administrateur officiel)
 const KNOWN_PHONE_EMAIL_MAP = {
@@ -43,24 +44,39 @@ export const isNetworkError = (error) => {
   );
 };
 
-// Formater un numéro de téléphone en chiffres purs standardisés
-export const cleanPhoneDigits = (phone) => {
+// Formater un numéro de téléphone en chiffres purs standardisés (Sénégal & Panafricain)
+export const cleanPhoneDigits = (phone, dialCode = '+221') => {
+  if (!phone) return '';
   const digits = String(phone || '').replace(/[^0-9]/g, '');
-  if (digits.length === 9) return digits;
-  if (digits.startsWith('221') && digits.length === 12) return digits.substring(3);
-  if (digits.startsWith('00221') && digits.length === 14) return digits.substring(5);
-  return digits;
+  const cleanDial = String(dialCode || '+221').replace(/[^0-9]/g, '');
+
+  // 1. Si indicatif Sénégal (221)
+  if (cleanDial === '221') {
+    if (digits.length === 9) return digits;
+    if (digits.startsWith('221') && digits.length === 12) return digits.substring(3);
+    if (digits.startsWith('00221') && digits.length === 14) return digits.substring(5);
+    return digits;
+  }
+
+  // 2. Si un autre indicatif africain (ex: Côte d'Ivoire 225, Guinée 224, Cameroun 237...)
+  if (digits.startsWith(cleanDial)) {
+    return digits;
+  }
+  if (digits.startsWith(`00${cleanDial}`)) {
+    return digits.substring(2);
+  }
+  return `${cleanDial}${digits}`;
 };
 
 // Convertir un numéro de téléphone en e-mail technique Firebase Auth transparent
-export const phoneToAuthEmail = (phone) => {
-  const digits = cleanPhoneDigits(phone);
+export const phoneToAuthEmail = (phone, dialCode = '+221') => {
+  const digits = cleanPhoneDigits(phone, dialCode);
   return `${digits}@logeetudiant.sn`;
 };
 
 // Vérifier strictement si un numéro de téléphone est déjà associé à un compte Logetudiant (Optimisé ultra-rapide)
-export const isPhoneAlreadyRegistered = async (phone) => {
-  const cleanPhone = cleanPhoneDigits(phone);
+export const isPhoneAlreadyRegistered = async (phone, dialCode = '+221') => {
+  const cleanPhone = cleanPhoneDigits(phone, dialCode);
   if (!cleanPhone || cleanPhone.length < 8) {
     return { registered: false };
   }
@@ -159,10 +175,10 @@ export const generate6DigitCode = () => {
 };
 
 // Enregistrer et envoyer le code de confirmation SMS (6 chiffres)
-export const sendPhoneVerificationCode = async (phone, type = 'inscription') => {
-  const cleanPhone = cleanPhoneDigits(phone);
+export const sendPhoneVerificationCode = async (phone, type = 'inscription', dialCode = '+221') => {
+  const cleanPhone = cleanPhoneDigits(phone, dialCode);
   if (!cleanPhone || cleanPhone.length < 8) {
-    return { success: false, error: "Veuillez entrer un numéro de téléphone valide (ex: 77 123 45 67)." };
+    return { success: false, error: "Veuillez entrer un numéro de téléphone valide." };
   }
 
   const code = generate6DigitCode();
@@ -179,6 +195,7 @@ export const sendPhoneVerificationCode = async (phone, type = 'inscription') => 
       phone: cleanPhone,
       code: code,
       type: type,
+      dialCode: dialCode,
       expiresAt: expiresAt,
       createdAt: new Date(),
     });
@@ -188,7 +205,7 @@ export const sendPhoneVerificationCode = async (phone, type = 'inscription') => 
 
   // 3. Envoi effectif du vrai message SMS via la passerelle télécom
   try {
-    const smsResult = await sendRealSms(cleanPhone, code, type);
+    const smsResult = await sendRealSms(cleanPhone, code, type, dialCode);
 
     // Mémoriser la session Firebase si disponible
     if (smsResult?.sessionInfo) {
@@ -228,8 +245,8 @@ export const sendPhoneVerificationCode = async (phone, type = 'inscription') => 
 };
 
 // Vérifier la validité du code à 6 chiffres saisi
-export const verifyPhoneCode = async (phone, enteredCode, expectedCode = null) => {
-  const cleanPhone = cleanPhoneDigits(phone);
+export const verifyPhoneCode = async (phone, enteredCode, expectedCode = null, dialCode = '+221') => {
+  const cleanPhone = cleanPhoneDigits(phone, dialCode);
   const cleanEntered = String(enteredCode || '').trim();
 
   if (!cleanEntered || cleanEntered.length !== 6) {
@@ -295,14 +312,14 @@ export const verifyPhoneCode = async (phone, enteredCode, expectedCode = null) =
 
 // Inscription d'un utilisateur par Numéro de Téléphone (SANS E-MAIL)
 // STRICTEMENT 1 NUMÉRO = 1 SEUL COMPTE
-export const registerUserWithPhone = async (phone, password, userData) => {
-  const cleanPhone = cleanPhoneDigits(phone);
+export const registerUserWithPhone = async (phone, password, userData, dialCode = '+221') => {
+  const cleanPhone = cleanPhoneDigits(phone, dialCode);
   if (!cleanPhone || cleanPhone.length < 8) {
     return { success: false, error: "Numéro de téléphone invalide." };
   }
 
   // Vérification stricte préalable : un numéro de téléphone ne peut avoir qu'un seul compte
-  const check = await isPhoneAlreadyRegistered(cleanPhone);
+  const check = await isPhoneAlreadyRegistered(cleanPhone, dialCode);
   if (check.networkError) {
     return {
       success: false,
@@ -318,7 +335,7 @@ export const registerUserWithPhone = async (phone, password, userData) => {
     };
   }
 
-  const authEmail = phoneToAuthEmail(cleanPhone);
+  const authEmail = phoneToAuthEmail(cleanPhone, dialCode);
 
   try {
     // 1. Création dans Firebase Auth avec l'e-mail technique transparent
@@ -338,6 +355,10 @@ export const registerUserWithPhone = async (phone, password, userData) => {
       prenom: userData.prenom || '',
       nomComplet: userData.nomComplet || `${userData.prenom || ''} ${userData.nom || ''}`.trim(),
       role: userData.role || 'etudiant',
+      countryId: userData.countryId || 'SN',
+      countryNom: userData.countryNom || 'Sénégal',
+      dialCode: dialCode || '+221',
+      currency: userData.currency || 'FCFA',
       statutValidation: userData.role === 'bailleur' ? 'en_attente' : 'valide',
       telephoneVerifie: true,
       piecesJustificatives: userData.piecesJustificatives || [],
@@ -373,15 +394,15 @@ export const registerUserWithPhone = async (phone, password, userData) => {
   }
 };
 
-// Connexion ultra-rapide de l'utilisateur (SUPPORT INTÉGRAL EMAIL ET NUMÉRO DE TÉLÉPHONE)
-export const loginUser = async (identifier, password) => {
+// Connexion ultra-rapide de l'utilisateur (SUPPORT INTÉGRAL EMAIL ET NUMÉRO DE TÉLÉPHONE PANAFRICAIN)
+export const loginUser = async (identifier, password, dialCode = '+221') => {
   try {
     const cleanId = String(identifier || '').trim();
     if (!cleanId || !password) {
       return { success: false, error: "Veuillez saisir votre numéro de téléphone et votre mot de passe." };
     }
 
-    const cleanDigits = cleanPhoneDigits(cleanId);
+    const cleanDigits = cleanPhoneDigits(cleanId, dialCode);
 
     // 1. Détermination instantanée (0ms) de l'adresse e-mail technique Firebase
     let targetEmail = '';
@@ -390,7 +411,7 @@ export const loginUser = async (identifier, password) => {
     } else if (cleanDigits && KNOWN_PHONE_EMAIL_MAP[cleanDigits]) {
       targetEmail = KNOWN_PHONE_EMAIL_MAP[cleanDigits];
     } else if (cleanDigits) {
-      targetEmail = phoneToAuthEmail(cleanDigits);
+      targetEmail = phoneToAuthEmail(cleanDigits, dialCode);
     } else {
       targetEmail = cleanId;
     }
@@ -536,17 +557,17 @@ export const loginUser = async (identifier, password) => {
 };
 
 // Réinitialisation du mot de passe UNIQUE PAR NUMÉRO DE TÉLÉPHONE (SANS AUCUN E-MAIL)
-export const resetPasswordWithPhone = async (identifier, newPassword) => {
+export const resetPasswordWithPhone = async (identifier, newPassword, dialCode = '+221') => {
   const cleanId = String(identifier || '').trim();
   if (!cleanId) {
     return { success: false, error: "Veuillez entrer votre numéro de téléphone." };
   }
 
-  const cleanDigits = cleanPhoneDigits(cleanId);
+  const cleanDigits = cleanPhoneDigits(cleanId, dialCode);
   const cleanPass = String(newPassword || '').trim();
 
   try {
-    const targetEmail = phoneToAuthEmail(cleanDigits);
+    const targetEmail = phoneToAuthEmail(cleanDigits, dialCode);
 
     // 1. Rechercher le compte correspondant au numéro de téléphone
     const q = query(collection(db, "users"), where("telephone", "==", cleanDigits));

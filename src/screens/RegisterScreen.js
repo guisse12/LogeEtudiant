@@ -19,6 +19,10 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { cleanRegistrationNames } from '../utils/nameFormatter';
+import CountryPickerModal, { CountryPickerButton } from '../components/CountryPickerModal';
+import { LanguagePill } from '../components/LanguageSelector';
+import { useTranslation } from '../i18n';
+import { DEFAULT_COUNTRY } from '../services/countryService';
 import { 
   sendPhoneVerificationCode, 
   verifyPhoneCode, 
@@ -28,13 +32,16 @@ import {
 } from '../services/authService';
 
 export default function RegisterScreen({ navigation, route }) {
+  const { t } = useTranslation();
+  const [selectedCountry, setSelectedCountry] = useState(DEFAULT_COUNTRY);
+  const [countryModalVisible, setCountryModalVisible] = useState(false);
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [nom, setNom] = useState('');
   const [prenom, setPrenom] = useState('');
   const [telephone, setTelephone] = useState(route?.params?.prefilledPhone || '');
   const [role, setRole] = useState('etudiant'); // 'etudiant' ou 'bailleur'
-  const [justificatifsUris, setJustificatifsUris] = useState([]); // Jusqu'à 5 pièces
+  const [justificatifsUris, setJustificatifsUris] = useState([]); // Jusqu'à 3 pièces
   const [loading, setLoading] = useState(false);
   const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
   const scrollViewRef = useRef(null);
@@ -79,25 +86,25 @@ export default function RegisterScreen({ navigation, route }) {
 
   // Choix Appareil photo ou Galerie pour le bailleur
   const handleAddJustificatif = () => {
-    if (justificatifsUris.length >= 5) {
-      Alert.alert("Limite atteinte", "Vous pouvez ajouter 5 pièces justificatives au maximum.");
+    if (justificatifsUris.length >= 3) {
+      Alert.alert(t('common.limitReached'), t('auth.maxDocsReached'));
       return;
     }
 
     Alert.alert(
-      "Pièce justificative",
-      "Transmettez votre pièce d'identité ou titre (CNI, passeport, RCCM...)",
+      t('auth.justificationDocs'),
+      t('auth.justificationSub'),
       [
         {
-          text: "📷 Prendre une photo",
+          text: `📷 ${t('common.photo')}`,
           onPress: handleTakePhoto,
         },
         {
-          text: "📁 Choisir dans la galerie",
+          text: `📁 ${t('common.gallery')}`,
           onPress: handlePickFromGallery,
         },
         {
-          text: "Annuler",
+          text: t('common.cancel'),
           style: "cancel",
         },
       ]
@@ -108,7 +115,7 @@ export default function RegisterScreen({ navigation, route }) {
     try {
       const permissionResult = await ImagePicker.requestCameraPermissionsAsync();
       if (!permissionResult.granted) {
-        Alert.alert("Permission requise", "L'accès à l'appareil photo est nécessaire.");
+        Alert.alert(t('common.permissionRequired'), t('common.cameraPermission'));
         return;
       }
 
@@ -121,16 +128,16 @@ export default function RegisterScreen({ navigation, route }) {
         setJustificatifsUris(prev => [...prev, result.assets[0].uri]);
       }
     } catch (error) {
-      Alert.alert("Erreur", "Impossible de capturer la photo.");
+      Alert.alert(t('common.error'), t('common.cameraCaptureError'));
     }
   };
 
   const handlePickFromGallery = async () => {
-    const remainingSlots = 5 - justificatifsUris.length;
+    const remainingSlots = 3 - justificatifsUris.length;
     try {
       const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (!permissionResult.granted) {
-        Alert.alert("Permission requise", "L'accès à la galerie photo est nécessaire.");
+        Alert.alert(t('common.permissionRequired'), t('common.galleryPermission'));
         return;
       }
 
@@ -146,7 +153,7 @@ export default function RegisterScreen({ navigation, route }) {
         setJustificatifsUris(prev => [...prev, ...newUris]);
       }
     } catch (error) {
-      Alert.alert("Erreur", "Impossible de charger les photos.");
+      Alert.alert(t('common.error'), t('common.galleryLoadError'));
     }
   };
 
@@ -156,32 +163,37 @@ export default function RegisterScreen({ navigation, route }) {
 
   // Étape 1 : Valider les champs et envoyer le code de confirmation par message
   const handleInitiateRegister = async () => {
-    const cleanPhone = cleanPhoneDigits(telephone);
+    const rawDigits = telephone.replace(/[^0-9]/g, '');
+    const cleanPhone = cleanPhoneDigits(telephone, selectedCountry.dialCode);
+    const requiredLen = selectedCountry.phoneLength || 9;
 
-    if (!cleanPhone || cleanPhone.length !== 9) {
-      Alert.alert("Numéro de téléphone invalide", "Le numéro de téléphone doit comporter exactement 9 chiffres (ex: 77 123 45 67).");
+    if (!rawDigits || rawDigits.length !== requiredLen) {
+      Alert.alert(
+        t('common.error'), 
+        t('auth.enterValidPhone')
+      );
       return;
     }
 
     if (!prenom.trim()) {
-      Alert.alert("Prénom requis", "Veuillez renseigner votre prénom (maximum 20 lettres).");
+      Alert.alert(t('common.requiredFields'), t('auth.firstNameRequired'));
       return;
     }
 
     if (!nom.trim()) {
-      Alert.alert("Nom requis", "Veuillez renseigner votre nom (maximum 15 lettres).");
+      Alert.alert(t('common.requiredFields'), t('auth.lastNameRequired'));
       return;
     }
 
     if (!password || password.length !== 6) {
-      Alert.alert("Mot de passe invalide", "Le mot de passe doit comporter exactement 6 chiffres.");
+      Alert.alert(t('common.error'), t('auth.passwordSixDigits'));
       return;
     }
 
     if (role === 'bailleur' && justificatifsUris.length === 0) {
       Alert.alert(
-        "Justificatif requis", 
-        "En tant que bailleur, vous devez ajouter au moins un document justificatif (CNI, titre de propriété...) pour valider votre compte."
+        t('common.requiredFields'), 
+        t('auth.docRequired')
       );
       return;
     }
@@ -189,10 +201,10 @@ export default function RegisterScreen({ navigation, route }) {
     setLoading(true);
     try {
       // 1. Contrôle strict d'unicité : 1 numéro de téléphone = 1 et 1 seul compte Logetudiant
-      const checkResult = await isPhoneAlreadyRegistered(cleanPhone);
+      const checkResult = await isPhoneAlreadyRegistered(cleanPhone, selectedCountry.dialCode);
       
       if (checkResult.networkError) {
-        Alert.alert("Connexion impossible", "Veuillez vérifier votre connexion Internet puis réessayer.");
+        Alert.alert(t('auth.networkError'), t('auth.networkErrorDesc'));
         setLoading(false);
         return;
       }
@@ -200,15 +212,15 @@ export default function RegisterScreen({ navigation, route }) {
       if (checkResult.registered) {
         setLoading(false);
         Alert.alert(
-          "Numéro déjà enregistré",
-          `Le numéro +221 ${cleanPhone} est déjà associé à un compte Logetudiant.\n\nChaque numéro de téléphone ne peut avoir qu'un seul et unique compte.`,
+          t('auth.alreadyRegisteredTitle'),
+          t('auth.phoneAlreadyUsedDesc'),
           [
             {
-              text: "Se connecter",
-              onPress: () => navigation.navigate('Login', { prefilledPhone: cleanPhone }),
+              text: t('auth.loginButton'),
+              onPress: () => navigation.navigate('Login', { prefilledPhone: telephone }),
             },
             {
-              text: "Modifier le numéro",
+              text: t('auth.modifyPhone'),
               style: "cancel",
             }
           ]
@@ -217,7 +229,7 @@ export default function RegisterScreen({ navigation, route }) {
       }
 
       // 2. Envoi du code SMS de vérification
-      const res = await sendPhoneVerificationCode(cleanPhone, 'inscription');
+      const res = await sendPhoneVerificationCode(cleanPhone, 'inscription', selectedCountry.dialCode);
       if (res.success) {
         setExpectedCode(res.code);
         setVerificationCode('');
@@ -226,14 +238,14 @@ export default function RegisterScreen({ navigation, route }) {
         setTimeout(() => otpInputRef.current?.focus(), 350);
       } else {
         if (res.errorType === 'NETWORK_ERROR') {
-          Alert.alert("Connexion impossible", "Veuillez vérifier votre connexion Internet.");
+          Alert.alert(t('auth.networkError'), t('auth.networkErrorDesc'));
         } else {
-          Alert.alert("Erreur", res.error || "Impossible d'envoyer le code.");
+          Alert.alert(t('common.error'), res.error || t('auth.codeInvalid'));
         }
       }
     } catch (err) {
       console.error("Erreur register initiate :", err);
-      Alert.alert("Erreur", "Une erreur est survenue lors de l'envoi du code. Veuillez vérifier votre connexion Internet.");
+      Alert.alert(t('common.error'), t('auth.networkErrorDesc'));
     } finally {
       setLoading(false);
     }
@@ -241,19 +253,19 @@ export default function RegisterScreen({ navigation, route }) {
 
   // Étape 2 : Vérification du code 6 chiffres et création effective du compte
   const handleConfirmCodeAndRegister = async () => {
-    const cleanPhone = cleanPhoneDigits(telephone);
+    const cleanPhone = cleanPhoneDigits(telephone, selectedCountry.dialCode);
     const cleanCode = verificationCode.trim();
 
     if (cleanCode.length !== 6) {
-      Alert.alert("Code incomplet", "Veuillez saisir les 6 chiffres du code de confirmation.");
+      Alert.alert(t('auth.incompleteCode'), t('auth.incompleteCodeDesc'));
       return;
     }
 
     setVerifying(true);
     try {
-      const verif = await verifyPhoneCode(cleanPhone, cleanCode, expectedCode);
+      const verif = await verifyPhoneCode(cleanPhone, cleanCode, expectedCode, selectedCountry.dialCode);
       if (!verif.success) {
-        Alert.alert("Code incorrect", verif.error || "Le code saisi est invalide.");
+        Alert.alert(t('auth.invalidCode'), t('auth.invalidCodeDesc'));
         setVerifying(false);
         return;
       }
@@ -267,45 +279,49 @@ export default function RegisterScreen({ navigation, route }) {
         prenom: finalPrenom,
         nomComplet: finalNomComplet,
         role: role,
+        countryId: selectedCountry.id,
+        countryNom: selectedCountry.name,
+        dialCode: selectedCountry.dialCode,
+        currency: selectedCountry.currency,
         piecesJustificatives: justificatifsUris,
-      });
+      }, selectedCountry.dialCode);
 
       if (result.success) {
         setCodeModalVisible(false);
         Alert.alert(
-          "Inscription réussie 🎉", 
-          `Votre compte a été vérifié et créé avec succès !\n\nVous pouvez maintenant vous connecter avec votre numéro de téléphone ${cleanPhone}.`,
+          t('auth.registrationSuccess'), 
+          t('auth.registrationSuccessDesc'),
           [
             {
-              text: "Se connecter",
-              onPress: () => navigation.replace('Login', { prefilledPhone: cleanPhone }),
+              text: t('auth.loginButton'),
+              onPress: () => navigation.replace('Login', { prefilledPhone: telephone }),
             }
           ]
         );
       } else {
         if (result.errorType === 'PHONE_EXISTS') {
           Alert.alert(
-            "Compte déjà existant",
-            "Ce numéro de téléphone est déjà associé à un compte. Veuillez vous connecter.",
+            t('auth.alreadyRegisteredTitle'),
+            t('auth.alreadyRegisteredDesc'),
             [
               {
-                text: "Se connecter",
+                text: t('auth.loginButton'),
                 onPress: () => {
                   setCodeModalVisible(false);
-                  navigation.replace('Login', { prefilledPhone: cleanPhone });
+                  navigation.replace('Login', { prefilledPhone: telephone });
                 }
               }
             ]
           );
         } else if (result.errorType === 'NETWORK_ERROR') {
-          Alert.alert("Connexion impossible", "Veuillez vérifier votre connexion Internet puis réessayer.");
+          Alert.alert(t('auth.networkError'), t('auth.networkErrorDesc'));
         } else {
-          Alert.alert("Erreur création", result.error || "Impossible de finaliser l'inscription.");
+          Alert.alert(t('common.error'), result.error || t('auth.completeRegistrationError'));
         }
       }
     } catch (error) {
       console.error("Erreur inscription :", error);
-      Alert.alert("Erreur", "Une erreur technique est survenue. Veuillez vérifier votre connexion.");
+      Alert.alert(t('common.error'), t('auth.networkErrorDesc'));
     } finally {
       setVerifying(false);
     }
@@ -314,17 +330,17 @@ export default function RegisterScreen({ navigation, route }) {
   // Renvoyer le code par message si non reçu
   const handleResendCode = async () => {
     if (countdown > 0) return;
-    const cleanPhone = cleanPhoneDigits(telephone);
+    const cleanPhone = cleanPhoneDigits(telephone, selectedCountry.dialCode);
     setResendingCode(true);
     try {
-      const res = await sendPhoneVerificationCode(cleanPhone, 'inscription');
+      const res = await sendPhoneVerificationCode(cleanPhone, 'inscription', selectedCountry.dialCode);
       if (res.success) {
         setExpectedCode(res.code);
         setVerificationCode('');
         setCountdown(30);
       }
     } catch (e) {
-      Alert.alert("Erreur", "Impossible de renvoyer le code.");
+      Alert.alert(t('common.error'), t('auth.resendCodeFailed'));
     } finally {
       setResendingCode(false);
     }
@@ -348,6 +364,12 @@ export default function RegisterScreen({ navigation, route }) {
           keyboardDismissMode="on-drag"
         >
           
+          {/* SÉLECTEUR DE LANGUE DISCRET (FR / EN) */}
+          <View style={styles.topLangRow}>
+            <View style={{ flex: 1 }} />
+            <LanguagePill />
+          </View>
+
           {/* LOGO PARFAITEMENT DÉTOURÉ & ADAPTÉ AU CLAVIER */}
           <View style={[styles.logoWrapper, isKeyboardVisible && styles.logoWrapperCompact]}>
             <Image 
@@ -357,8 +379,8 @@ export default function RegisterScreen({ navigation, route }) {
             />
           </View>
 
-          <Text style={[styles.title, isKeyboardVisible && styles.titleCompact]}>Créer un compte</Text>
-          <Text style={[styles.subtitle, isKeyboardVisible && styles.subtitleCompact]}>Rejoignez la communauté Logetudiant Sénégal</Text>
+          <Text style={[styles.title, isKeyboardVisible && styles.titleCompact]}>{t('auth.registerTitle')}</Text>
+          <Text style={[styles.subtitle, isKeyboardVisible && styles.subtitleCompact]}>{t('auth.registerSubtitle')}</Text>
 
           {/* SÉLECTEUR DE RÔLE MODERNE */}
           <View style={[styles.roleContainer, isKeyboardVisible && { marginBottom: 12 }]}>
@@ -373,7 +395,7 @@ export default function RegisterScreen({ navigation, route }) {
                 color={role === 'etudiant' ? '#fff' : '#475569'} 
                 style={{ marginRight: 6 }} 
               />
-              <Text style={[styles.roleText, role === 'etudiant' && styles.roleTextActive]}>Étudiant</Text>
+              <Text style={[styles.roleText, role === 'etudiant' && styles.roleTextActive]}>{t('auth.roleStudent')}</Text>
             </TouchableOpacity>
             <TouchableOpacity 
               style={[styles.roleButton, role === 'bailleur' && { backgroundColor: '#E8A008' }]}
@@ -386,7 +408,7 @@ export default function RegisterScreen({ navigation, route }) {
                 color={role === 'bailleur' ? '#fff' : '#475569'} 
                 style={{ marginRight: 6 }} 
               />
-              <Text style={[styles.roleText, role === 'bailleur' && styles.roleTextActive]}>Bailleur</Text>
+              <Text style={[styles.roleText, role === 'bailleur' && styles.roleTextActive]}>{t('auth.roleLandlord')}</Text>
             </TouchableOpacity>
           </View>
 
@@ -395,7 +417,7 @@ export default function RegisterScreen({ navigation, route }) {
             <Ionicons name="person-outline" size={19} color="#003880" style={styles.inputIcon} />
             <TextInput 
               style={styles.inputField} 
-              placeholder="Prénom" 
+              placeholder={t('auth.firstName')} 
               placeholderTextColor="#94A3B8"
               value={prenom} 
               onChangeText={setPrenom}
@@ -413,7 +435,7 @@ export default function RegisterScreen({ navigation, route }) {
             <Ionicons name="person-outline" size={19} color="#003880" style={styles.inputIcon} />
             <TextInput 
               style={styles.inputField} 
-              placeholder="Nom" 
+              placeholder={t('auth.lastName')} 
               placeholderTextColor="#94A3B8"
               value={nom} 
               onChangeText={setNom}
@@ -426,17 +448,20 @@ export default function RegisterScreen({ navigation, route }) {
             />
           </View>
 
-          {/* CHAMP NUMÉRO DE TÉLÉPHONE (9 CHIFFRES UNIQUEMENT) */}
+          {/* CHAMP NUMÉRO DE TÉLÉPHONE AVEC SÉLECTEUR DE PAYS AFRICAIN */}
           <View style={styles.inputContainer}>
-            <Ionicons name="call-outline" size={19} color="#003880" style={styles.inputIcon} />
+            <CountryPickerButton
+              selectedCountry={selectedCountry}
+              onPress={() => setCountryModalVisible(true)}
+            />
             <TextInput 
               style={styles.inputField} 
-              placeholder="Numéro de téléphone" 
+              placeholder={selectedCountry.samplePhone || t('auth.phonePlaceholder')} 
               placeholderTextColor="#94A3B8"
               value={telephone} 
               onChangeText={setTelephone} 
               keyboardType="numeric"
-              maxLength={9}
+              maxLength={selectedCountry.phoneLength || 10}
               onFocus={() => {
                 setTimeout(() => {
                   scrollViewRef.current?.scrollTo({ y: 140, animated: true });
@@ -450,7 +475,7 @@ export default function RegisterScreen({ navigation, route }) {
             <Ionicons name="lock-closed-outline" size={19} color="#003880" style={styles.inputIcon} />
             <TextInput 
               style={styles.passwordInput} 
-              placeholder="Mot de passe (6 chiffres)" 
+              placeholder={t('auth.passwordPlaceholder')} 
               placeholderTextColor="#94A3B8"
               value={password} 
               onChangeText={setPassword} 
@@ -481,16 +506,16 @@ export default function RegisterScreen({ navigation, route }) {
             <View style={styles.bailleurCard}>
               <View style={styles.bailleurHeader}>
                 <Ionicons name="shield-checkmark-outline" size={20} color="#003880" style={{ marginRight: 6 }} />
-                <Text style={styles.bailleurTitle}>Vérification du profil Bailleur</Text>
+                <Text style={styles.bailleurTitle}>{t('auth.justificationDocs')}</Text>
               </View>
               <Text style={styles.bailleurDesc}>
-                Fournissez au moins une pièce justificative (CNI, passeport, titre de propriété) pour authentifier votre identité.
+                {t('auth.justificationSub')}
               </Text>
               
               <TouchableOpacity style={styles.filePickerBtn} onPress={handleAddJustificatif}>
                 <Ionicons name="cloud-upload-outline" size={18} color="#fff" style={{ marginRight: 6 }} />
                 <Text style={styles.filePickerText}>
-                  Ajouter un document ({justificatifsUris.length}/5)
+                  {t('auth.addDoc')} ({justificatifsUris.length}/3)
                 </Text>
               </TouchableOpacity>
 
@@ -524,7 +549,7 @@ export default function RegisterScreen({ navigation, route }) {
               <ActivityIndicator color="#fff" />
             ) : (
               <View style={styles.submitBtnContent}>
-                <Text style={styles.submitBtnText}>S'inscrire</Text>
+                <Text style={styles.submitBtnText}>{t('auth.registerButton')}</Text>
                 <Ionicons name="arrow-forward" size={18} color="#fff" style={{ marginLeft: 6 }} />
               </View>
             )}
@@ -534,7 +559,7 @@ export default function RegisterScreen({ navigation, route }) {
           <View style={styles.loginLinkContainer}>
             <TouchableOpacity onPress={() => navigation.navigate('Login')}>
               <Text style={styles.loginLinkText}>
-                Vous avez déjà un compte ? <Text style={styles.loginLinkHighlight}>Se connecter</Text>
+                {t('auth.alreadyAccount')} <Text style={styles.loginLinkHighlight}>{t('auth.loginButton')}</Text>
               </Text>
             </TouchableOpacity>
           </View>
@@ -586,7 +611,7 @@ export default function RegisterScreen({ navigation, route }) {
               </Text>
               <Text style={styles.modalDescCentered}>
                 Saisissez le code à 6 chiffres envoyé au{'\n'}
-                <Text style={styles.phoneHighlight}>+221 {telephone}</Text>
+                <Text style={styles.phoneHighlight}>{selectedCountry.dialCode} {telephone}</Text>
               </Text>
 
               {/* 6 CELLULES DU CODE PIN OTP ULTRA-PROFESSIONNEL */}
@@ -675,11 +700,29 @@ export default function RegisterScreen({ navigation, route }) {
         </KeyboardAvoidingView>
       </Modal>
 
+      {/* SÉLECTEUR DE PAYS AFRICAINS */}
+      <CountryPickerModal
+        visible={countryModalVisible}
+        onClose={() => setCountryModalVisible(false)}
+        onSelectCountry={(country) => {
+          setSelectedCountry(country);
+          setTelephone('');
+        }}
+        selectedCountry={selectedCountry}
+      />
+
     </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
+  topLangRow: {
+    width: '100%',
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    marginBottom: 8,
+    paddingHorizontal: 4,
+  },
   container: { 
     paddingHorizontal: 24, 
     backgroundColor: '#F8FAFC', 

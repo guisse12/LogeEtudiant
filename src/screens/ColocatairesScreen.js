@@ -18,6 +18,7 @@ import { collection, getDocs, query, where, doc, deleteDoc } from 'firebase/fire
 import { useFocusEffect } from '@react-navigation/native';
 import { db, auth } from '../config/firebase';
 import { formatCleanFullName } from '../utils/nameFormatter';
+import { useTranslation } from '../i18n';
 
 const UNIVERSITES = [
   { id: 'TOUS', nom: 'Toutes les zones' },
@@ -42,6 +43,7 @@ const UNIVERSITES = [
 ];
 
 export default function ColocatairesScreen({ navigation }) {
+  const { t } = useTranslation();
   const [annonces, setAnnonces] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedUni, setSelectedUni] = useState('TOUS');
@@ -106,21 +108,21 @@ export default function ColocatairesScreen({ navigation }) {
 
   const handleDeleteAnnonce = (id) => {
     Alert.alert(
-      "Supprimer l'annonce",
-      "Voulez-vous vraiment retirer votre annonce de colocation ?",
+      t('coloc.deleteTitle'),
+      t('coloc.deleteMsg'),
       [
-        { text: "Annuler", style: "cancel" },
+        { text: t('common.cancel'), style: "cancel" },
         { 
-          text: "Supprimer", 
+          text: t('coloc.deleteBtn'), 
           style: "destructive",
           onPress: async () => {
             try {
               await deleteDoc(doc(db, "coloc_annonces", id));
               setAnnonces(prev => prev.filter(a => a.id !== id));
-              Alert.alert("Succès", "Votre annonce a bien été supprimée.");
+              Alert.alert(t('common.success'), t('coloc.deleteSuccess'));
             } catch (err) {
               console.error("Erreur suppression annonce :", err);
-              Alert.alert("Erreur", "Impossible de supprimer l'annonce pour le moment.");
+              Alert.alert(t('common.error'), "Impossible de supprimer l'annonce pour le moment.");
             }
           }
         }
@@ -142,7 +144,7 @@ export default function ColocatairesScreen({ navigation }) {
           <Ionicons name="arrow-back" size={22} color="#003880" />
         </TouchableOpacity>
 
-        <Text style={styles.navTitle}>Recherche Colocataires</Text>
+        <Text style={styles.navTitle}>{t('coloc.title')}</Text>
 
         <TouchableOpacity 
           style={styles.addButton} 
@@ -150,14 +152,14 @@ export default function ColocatairesScreen({ navigation }) {
           activeOpacity={0.85}
         >
           <Ionicons name="add" size={16} color="#FFF" style={{ marginRight: 2 }} />
-          <Text style={styles.addButtonText}>Publier</Text>
+          <Text style={styles.addButtonText}>{t('coloc.publishBtn')}</Text>
         </TouchableOpacity>
       </View>
 
       <View style={styles.container}>
         {/* Filtres par zone (Toutes les 18 universités du Sénégal) */}
         <View style={styles.filterWrapper}>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filterContainer}>
+          <ScrollView horizontal showsHorizontalIndicator={false} style={styles.filterContainer}>
             {UNIVERSITES.map((uni) => (
               <TouchableOpacity
                 key={uni.id}
@@ -166,7 +168,7 @@ export default function ColocatairesScreen({ navigation }) {
                 activeOpacity={0.75}
               >
                 <Text style={[styles.filterText, selectedUni === uni.id && styles.filterTextSelected]}>
-                  {uni.nom}
+                  {uni.id === 'TOUS' ? t('landlordHome.allZones') : uni.nom}
                 </Text>
               </TouchableOpacity>
             ))}
@@ -179,7 +181,7 @@ export default function ColocatairesScreen({ navigation }) {
         ) : annonces.length === 0 ? (
           <View style={styles.emptyContainer}>
             <Ionicons name="people-outline" size={48} color="#94A3B8" style={{ marginBottom: 10 }} />
-            <Text style={styles.emptyText}>Aucune annonce de colocation pour cette zone.</Text>
+            <Text style={styles.emptyText}>{t('coloc.noRequests')}</Text>
           </View>
         ) : (
           <FlatList
@@ -198,7 +200,7 @@ export default function ColocatairesScreen({ navigation }) {
                       <Text style={styles.authorName}>{formatCleanFullName(item.nomEtudiant)}</Text>
                       {isMyPost && (
                         <View style={styles.myPostBadge}>
-                          <Text style={styles.myPostText}>Mon annonce</Text>
+                          <Text style={styles.myPostText}>{t('coloc.myPostBadge')}</Text>
                         </View>
                       )}
                     </View>
@@ -211,21 +213,21 @@ export default function ColocatairesScreen({ navigation }) {
 
                   <View style={styles.cardFooter}>
                     <View style={styles.budgetRow}>
-                      <Text style={styles.budgetLabel}>Budget max recherché :</Text>
+                      <Text style={styles.budgetLabel}>{t('coloc.budgetMaxLabel')}</Text>
                       <Text style={styles.budgetVal}>
-                        {Number(item.budgetMax || 0).toLocaleString()} FCFA
+                        {Number(item.budgetMax || 0).toLocaleString()} {item.currency || 'FCFA'}
                       </Text>
                     </View>
                     
                     <View style={styles.actionButtonsRow}>
-                      {/* Bouton Contacter par WhatsApp (vert authentique WhatsApp #128C7E) */}
+                      {/* Bouton Contacter par WhatsApp */}
                       <TouchableOpacity 
                         style={styles.whatsappButton}
                         onPress={() => handleWhatsAppContact(item.telephone, item.nomEtudiant, item.universiteId)}
                         activeOpacity={0.8}
                       >
                         <Ionicons name="logo-whatsapp" size={15} color="#FFF" style={{ marginRight: 5 }} />
-                        <Text style={styles.whatsappButtonText}>WhatsApp</Text>
+                        <Text style={styles.whatsappButtonText}>{t('coloc.whatsappBtn')}</Text>
                       </TouchableOpacity>
 
                       {/* Si ce n'est pas mon annonce : bouton Discuter */}
@@ -240,7 +242,7 @@ export default function ColocatairesScreen({ navigation }) {
                           activeOpacity={0.8}
                         >
                           <Ionicons name="chatbubbles" size={14} color="#FFF" style={{ marginRight: 5 }} />
-                          <Text style={styles.chatButtonText}>Discuter</Text>
+                          <Text style={styles.chatButtonText}>{t('coloc.chatBtn')}</Text>
                         </TouchableOpacity>
                       ) : (
                         <>
@@ -251,7 +253,7 @@ export default function ColocatairesScreen({ navigation }) {
                             activeOpacity={0.8}
                           >
                             <Ionicons name="create-outline" size={14} color="#003880" style={{ marginRight: 4 }} />
-                            <Text style={styles.editButtonText}>Modifier</Text>
+                            <Text style={styles.editButtonText}>{t('coloc.editBtn')}</Text>
                           </TouchableOpacity>
 
                           {/* Bouton Supprimer */}

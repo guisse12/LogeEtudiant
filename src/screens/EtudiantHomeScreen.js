@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { 
   StyleSheet, 
   Text, 
@@ -19,14 +19,11 @@ import { collection, getDocs, query, where, doc, setDoc, deleteDoc } from 'fireb
 import { db, auth } from '../config/firebase';
 import { logoutUser } from '../services/authService';
 import { formatCleanFullName } from '../utils/nameFormatter';
-import { UNIVERSITES, SENEGAL_REGIONS } from '../services/universityService';
+import { UNIVERSITES, SENEGAL_REGIONS, getUniversitiesForCountry } from '../services/universityService';
+import { DEFAULT_COUNTRY, getCountryById } from '../services/countryService';
+import CountryPickerModal from '../components/CountryPickerModal';
+import { useTranslation } from '../i18n';
 import { registerForPushNotificationsAsync, subscribeToUserNotifications } from '../services/notificationService';
-
-const ZONES_UNIVERSITAIRES = [
-  { id: 'TOUS', nom: 'Toutes les zones' },
-  { id: 'FAVORIS', nom: 'Mes favoris' },
-  ...UNIVERSITES.map(u => ({ id: u.id, nom: `${u.id} (${u.ville})` }))
-];
 
 const TYPE_SUGGESTIONS = ['Tous', 'Appartement', 'Studio', 'Chambre', 'Villa', 'Colocation'];
 
@@ -51,10 +48,34 @@ const PropertyImageItem = ({ uri }) => {
 };
 
 export default function EtudiantHomeScreen({ navigation }) {
+  const { t } = useTranslation();
+  const [selectedCountry, setSelectedCountry] = useState(DEFAULT_COUNTRY);
+  const [countryModalVisible, setCountryModalVisible] = useState(false);
   const [biens, setBiens] = useState([]); // SEULEMENT LES LOGEMENTS DES BAILLEURS
   const [colocAnnonces, setColocAnnonces] = useState([]); // SEULEMENT LES RECHERCHES DES ÉTUDIANTS
   const [loading, setLoading] = useState(true);
   const [selectedUni, setSelectedUni] = useState('TOUS');
+
+  // Zones et universités dynamiques selon le pays sélectionné
+  const zonesUniversitaires = useMemo(() => {
+    const list = [
+      { id: 'TOUS', nom: `${t('studentHome.allZones')} (${selectedCountry?.flag || '🌍'})` },
+      { id: 'FAVORIS', nom: t('studentHome.myFavorites') },
+    ];
+    const countryUnis = (selectedCountry?.id === 'SN' || !selectedCountry)
+      ? UNIVERSITES
+      : getUniversitiesForCountry(selectedCountry?.id);
+
+    countryUnis.forEach(u => {
+      list.push({ id: u.id, nom: u.nom });
+    });
+    return list;
+  }, [selectedCountry, t]);
+
+  const handleSelectCountry = (country) => {
+    setSelectedCountry(country);
+    setSelectedUni('TOUS');
+  };
   const [selectedType, setSelectedType] = useState('Tous');
   const [feedMode, setFeedMode] = useState('bailleurs'); // 'bailleurs' | 'colocataires'
   const [favorisIds, setFavorisIds] = useState([]);
@@ -153,6 +174,16 @@ export default function EtudiantHomeScreen({ navigation }) {
   const getDisplayedBiens = () => {
     let baseList = [...biens];
 
+    // Filtrage par pays sélectionné
+    if (selectedCountry?.id) {
+      baseList = baseList.filter((item) => {
+        if (selectedCountry.id === 'SN') {
+          return !item.countryId || item.countryId === 'SN';
+        }
+        return item.countryId === selectedCountry.id;
+      });
+    }
+
     // Onglet Nouveautés : trié par date de publication la plus récente
     if (activeBottomTab === 'nouveautes') {
       baseList.sort((a, b) => {
@@ -200,7 +231,19 @@ export default function EtudiantHomeScreen({ navigation }) {
 
   // Filtrage des annonces de colocation (ÉTUDIANTS)
   const getDisplayedColocs = () => {
-    return colocAnnonces.filter((item) => {
+    let baseList = [...colocAnnonces];
+
+    // Filtrage par pays sélectionné
+    if (selectedCountry?.id) {
+      baseList = baseList.filter((item) => {
+        if (selectedCountry.id === 'SN') {
+          return !item.countryId || item.countryId === 'SN';
+        }
+        return item.countryId === selectedCountry.id;
+      });
+    }
+
+    return baseList.filter((item) => {
       const q = searchQuery.toLowerCase().trim();
       const matchesSearch = 
         !q ||
@@ -228,7 +271,7 @@ export default function EtudiantHomeScreen({ navigation }) {
 
   const handleContactColoc = (telephone, nomEtudiant, universiteId) => {
     if (!telephone) {
-      Alert.alert("Information", "Le numéro de téléphone de cet étudiant n'est pas disponible.");
+      Alert.alert(t('common.notice'), "Le numéro de téléphone n'est pas disponible.");
       return;
     }
 
@@ -239,8 +282,8 @@ export default function EtudiantHomeScreen({ navigation }) {
       cleanPhone = `221${cleanPhone}`;
     }
 
-    const prenom = nomEtudiant ? nomEtudiant.split(' ')[0] : 'camarade';
-    const message = `Bonjour ${prenom}, j'ai vu votre recherche de colocation (${universiteId || 'Campus'}) sur Logetudiant. Êtes-vous toujours à la recherche d'un colocataire ?`;
+    const prenom = nomEtudiant ? nomEtudiant.split(' ')[0] : '';
+    const message = `${t('studentHome.whatsappColocMsg')} (${universiteId || 'Campus'})`;
     const whatsappUrl = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(message)}`;
 
     Linking.openURL(whatsappUrl).catch(() => {
@@ -257,15 +300,15 @@ export default function EtudiantHomeScreen({ navigation }) {
         await deleteDoc(favRef);
         const updatedFavoris = favorisIds.filter((id) => id !== property.id);
         setFavorisIds(updatedFavoris);
-        Alert.alert("Favoris", "Logement retiré de vos favoris.");
+        Alert.alert(t('studentHome.favoritesTitle'), t('studentHome.favoriteRemoved'));
       } else {
         await setDoc(favRef, { ...property, dateAdded: new Date() });
         setFavorisIds([...favorisIds, property.id]);
-        Alert.alert("Favoris ❤️", "Logement ajouté à vos favoris.");
+        Alert.alert(t('studentHome.favoritesTitle'), t('studentHome.favoriteAdded'));
       }
     } catch (error) {
       console.error("Erreur gestion favoris :", error);
-      Alert.alert("Erreur", "Impossible de modifier les favoris.");
+      Alert.alert(t('common.error'), "Impossible de modifier les favoris.");
     }
   };
 
@@ -327,9 +370,9 @@ export default function EtudiantHomeScreen({ navigation }) {
             style={styles.navLogo} 
             resizeMode="contain" 
           />
-          <View>
-            <Text style={styles.navBrand}>Logetudiant</Text>
-            <Text style={styles.navTagline}>Logements près de votre campus</Text>
+          <View style={styles.navBrandContainer}>
+            <Text style={styles.navBrand} numberOfLines={1}>Logetudiant</Text>
+            <Text style={styles.navTagline} numberOfLines={1}>Logements près de votre campus</Text>
           </View>
         </View>
 
@@ -388,7 +431,7 @@ export default function EtudiantHomeScreen({ navigation }) {
             activeOpacity={0.85}
           >
             <Ionicons name="chatbubbles" size={20} color="#fff" />
-            <Text style={styles.quickCardText}>Mes Messages</Text>
+            <Text style={styles.quickCardText}>{t('studentHome.myMessages')}</Text>
           </TouchableOpacity>
 
           <TouchableOpacity 
@@ -397,7 +440,7 @@ export default function EtudiantHomeScreen({ navigation }) {
             activeOpacity={0.85}
           >
             <Ionicons name="people" size={20} color="#fff" />
-            <Text style={styles.quickCardText}>Trouver un Coloc</Text>
+            <Text style={styles.quickCardText}>{t('studentHome.findRoommate')}</Text>
           </TouchableOpacity>
         </View>
 
@@ -430,41 +473,54 @@ export default function EtudiantHomeScreen({ navigation }) {
               keyboardType="numeric"
               maxLength={7} // Limite à 7 chiffres (ex: 9 999 999)
             />
-            <Text style={styles.priceSuffix}>FCFA</Text>
+            <Text style={styles.priceSuffix}>{selectedCountry.currency || 'FCFA'}</Text>
           </View>
         </View>
 
         {/* SUGGESTIONS DE TYPES DE LOGEMENT (EX: APPARTEMENT, STUDIO...) */}
         <View style={styles.suggestionsContainer}>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.suggestionsScroll}>
-            {TYPE_SUGGESTIONS.map((t) => (
+            {TYPE_SUGGESTIONS.map((typeItem) => (
               <TouchableOpacity
-                key={t}
+                key={typeItem}
                 style={[
                   styles.suggestionChip, 
-                  selectedType === t && styles.suggestionChipSelected
+                  selectedType === typeItem && styles.suggestionChipSelected
                 ]}
-                onPress={() => setSelectedType(t)}
+                onPress={() => setSelectedType(typeItem)}
                 activeOpacity={0.75}
               >
                 <Text style={[
                   styles.suggestionChipText, 
-                  selectedType === t && styles.suggestionChipTextSelected
+                  selectedType === typeItem && styles.suggestionChipTextSelected
                 ]}>
-                  {t === 'Tous' ? '✨ Tous les types' : t}
+                  {typeItem === 'Tous'
+                    ? `✨ ${t('studentHome.allTypes')}`
+                    : (t(`landlordHome.types.${typeItem}`) || typeItem)}
                 </Text>
               </TouchableOpacity>
             ))}
           </ScrollView>
         </View>
 
-        {/* FILTRES PAR ZONES UNIVERSITAIRES */}
+        {/* SÉLECTEUR DE PAYS AFRICAIN & CAMPUS */}
         <View style={styles.zonesSection}>
-          <Text style={styles.sectionHeading}>
-            <Ionicons name="school-outline" size={15} color="#003880" /> Campus & Villes Universitaires :
-          </Text>
+          <View style={styles.countryHeaderRow}>
+            <Text style={styles.sectionHeading}>
+              <Ionicons name="school-outline" size={15} color="#003880" /> {t('studentHome.campusAndCities')} ({selectedCountry.name}) :
+            </Text>
+            <TouchableOpacity
+              style={styles.countryPickerPill}
+              onPress={() => setCountryModalVisible(true)}
+              activeOpacity={0.75}
+            >
+              <Text style={styles.countryPickerPillFlag}>{selectedCountry.flag}</Text>
+              <Text style={styles.countryPickerPillText}>{selectedCountry.name}</Text>
+              <Ionicons name="chevron-down" size={13} color="#003880" style={{ marginLeft: 3 }} />
+            </TouchableOpacity>
+          </View>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filterScroll}>
-            {ZONES_UNIVERSITAIRES.map((uni) => (
+            {zonesUniversitaires.map((uni) => (
               <TouchableOpacity
                 key={uni.id}
                 style={[
@@ -499,7 +555,7 @@ export default function EtudiantHomeScreen({ navigation }) {
               style={{ marginRight: 6 }} 
             />
             <Text style={[styles.segmentedTabText, feedMode === 'bailleurs' && styles.segmentedTabTextActive]}>
-              Logements Bailleurs ({displayedBiens.length})
+              {t('studentHome.tabBailleurs')} ({displayedBiens.length})
             </Text>
           </TouchableOpacity>
 
@@ -515,7 +571,7 @@ export default function EtudiantHomeScreen({ navigation }) {
               style={{ marginRight: 6 }} 
             />
             <Text style={[styles.segmentedTabText, feedMode === 'colocataires' && styles.segmentedTabTextActive]}>
-              Recherches Colocs ({displayedColocs.length})
+              {t('studentHome.tabColoc')} ({displayedColocs.length})
             </Text>
           </TouchableOpacity>
         </View>
@@ -526,10 +582,10 @@ export default function EtudiantHomeScreen({ navigation }) {
             <View style={styles.colocHighlightHeader}>
               <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                 <Ionicons name="people" size={15} color="#003880" style={{ marginRight: 6 }} />
-                <Text style={styles.colocHighlightTitle}>Recherches de Colocataires récentes</Text>
+                <Text style={styles.colocHighlightTitle}>{t('studentHome.recentColocs')}</Text>
               </View>
               <TouchableOpacity onPress={() => setFeedMode('colocataires')}>
-                <Text style={styles.colocHighlightLink}>Voir tout ({colocAnnonces.length}) →</Text>
+                <Text style={styles.colocHighlightLink}>{t('studentHome.viewAll')} ({colocAnnonces.length}) →</Text>
               </TouchableOpacity>
             </View>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.colocHighlightScroll}>
@@ -544,12 +600,12 @@ export default function EtudiantHomeScreen({ navigation }) {
                     <Ionicons name="person-circle" size={16} color="#003880" style={{ marginRight: 4 }} />
                     <Text style={styles.colocMiniName} numberOfLines={1}>{formatCleanFullName(colocItem.nomEtudiant)}</Text>
                     <View style={styles.colocMiniBadge}>
-                      <Text style={styles.colocMiniBadgeText}>{colocItem.universiteId}</Text>
+                      <Text style={styles.colocMiniBadgeText}>{(getCountryById(colocItem.countryId)?.flag || '🇸🇳')} {colocItem.universiteId}</Text>
                     </View>
                   </View>
                   <Text style={styles.colocMiniDesc} numberOfLines={2}>{colocItem.description}</Text>
                   <View style={styles.colocMiniBottom}>
-                    <Text style={styles.colocMiniBudget}>{Number(colocItem.budgetMax || 0).toLocaleString()} F</Text>
+                    <Text style={styles.colocMiniBudget}>{Number(colocItem.budgetMax || 0).toLocaleString()} {colocItem.currency || selectedCountry.currency || 'F'}</Text>
                     <TouchableOpacity 
                       style={styles.colocMiniWhatsapp}
                       onPress={() => handleContactColoc(colocItem.telephone, colocItem.nomEtudiant, colocItem.universiteId)}
@@ -576,7 +632,7 @@ export default function EtudiantHomeScreen({ navigation }) {
                   ? '🕒 Récemment consultés'
                   : activeBottomTab === 'favoris' || selectedUni === 'FAVORIS'
                   ? '❤️ Mes logements favoris'
-                  : '🏠 Logements disponibles des bailleurs'} 
+                  : `🏠 ${t('studentHome.availableLandlordHousing')}`} 
                 <Text style={styles.feedCount}> ({displayedBiens.length})</Text>
               </Text>
             </View>
@@ -590,13 +646,13 @@ export default function EtudiantHomeScreen({ navigation }) {
             ) : displayedBiens.length === 0 ? (
               <View style={styles.emptyCard}>
                 <Ionicons name="search-outline" size={44} color="#94A3B8" />
-                <Text style={styles.emptyTitle}>Aucun logement trouvé</Text>
+                <Text style={styles.emptyTitle}>{t('studentHome.noResults')}</Text>
                 <Text style={styles.emptySubtitle}>
                   {activeBottomTab === 'recents' 
                     ? "Vous n'avez pas encore consulté de logement dans cette session."
                     : activeBottomTab === 'favoris'
                     ? "Vous n'avez pas encore de logement enregistré en favori."
-                    : "Aucun bien ne correspond exactement à vos critères de recherche."}
+                    : t('studentHome.noResultsDesc')}
                 </Text>
               </View>
             ) : (
@@ -618,7 +674,7 @@ export default function EtudiantHomeScreen({ navigation }) {
                       {/* BADGE CAMPUS / VILLE */}
                       <View style={styles.campusBadge}>
                         <Text style={styles.campusBadgeText}>
-                          {item.localisation?.ville ? `${item.localisation.ville} • ` : ''}{item.universiteId || 'Campus'}
+                          {item.localisation?.ville ? `${item.localisation.ville} • ` : ''}{(getCountryById(item.countryId)?.flag || '🇸🇳')} {item.universiteId || 'Campus'}
                         </Text>
                       </View>
 
@@ -673,9 +729,9 @@ export default function EtudiantHomeScreen({ navigation }) {
                       <View style={styles.cardFooter}>
                         <View>
                           <Text style={styles.priceAmount}>
-                            {Number(item.prix || 0).toLocaleString()} FCFA
+                            {Number(item.prix || 0).toLocaleString()} {item.currency || selectedCountry.currency || 'FCFA'}
                           </Text>
-                          <Text style={styles.pricePeriod}>/ mois</Text>
+                          <Text style={styles.pricePeriod}>{t('landlordHome.perMonth')}</Text>
                         </View>
 
                         <TouchableOpacity 
@@ -737,7 +793,7 @@ export default function EtudiantHomeScreen({ navigation }) {
                         </View>
                       </View>
                       <View style={[styles.campusBadge, { backgroundColor: '#003880', position: 'relative', top: 0, left: 0 }]}>
-                        <Text style={[styles.campusBadgeText, { color: '#FFFFFF' }]}>{coloc.universiteId}</Text>
+                        <Text style={[styles.campusBadgeText, { color: '#FFFFFF' }]}>{(getCountryById(coloc.countryId)?.flag || '🇸🇳')} {coloc.universiteId}</Text>
                       </View>
                     </View>
 
@@ -745,7 +801,7 @@ export default function EtudiantHomeScreen({ navigation }) {
 
                     <View style={styles.cardFooter}>
                       <View>
-                        <Text style={styles.priceAmount}>{Number(coloc.budgetMax || 0).toLocaleString()} FCFA</Text>
+                        <Text style={styles.priceAmount}>{Number(coloc.budgetMax || 0).toLocaleString()} {coloc.currency || selectedCountry.currency || 'FCFA'}</Text>
                         <Text style={styles.pricePeriod}>budget max</Text>
                       </View>
 
@@ -861,6 +917,14 @@ export default function EtudiantHomeScreen({ navigation }) {
           <Text style={styles.tabLabel}>Profil</Text>
         </TouchableOpacity>
       </View>
+
+      {/* SÉLECTEUR DE PAYS AFRICAINS */}
+      <CountryPickerModal
+        visible={countryModalVisible}
+        onClose={() => setCountryModalVisible(false)}
+        onSelectCountry={handleSelectCountry}
+        selectedCountry={selectedCountry}
+      />
     </SafeAreaView>
   );
 }
@@ -899,8 +963,12 @@ const styles = StyleSheet.create({
     height: 38,
     marginRight: 10,
   },
+  navBrandContainer: {
+    flex: 1,
+    marginRight: 6,
+  },
   navBrand: {
-    fontSize: 18,
+    fontSize: 17,
     fontWeight: '800',
     color: '#0F172A',
     letterSpacing: -0.3,
@@ -1026,6 +1094,31 @@ const styles = StyleSheet.create({
   zonesSection: {
     marginBottom: 14,
   },
+  countryHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 6,
+  },
+  countryPickerPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#EFF6FF',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#BFDBFE',
+  },
+  countryPickerPillFlag: {
+    fontSize: 16,
+    marginRight: 4,
+  },
+  countryPickerPillText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#003880',
+  },
   
   // SUGGESTIONS RAPIDES DE RECHERCHE
   suggestionsContainer: {
@@ -1073,6 +1166,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     paddingVertical: 9,
+    paddingHorizontal: 4,
     borderRadius: 9,
   },
   segmentedTabActive: {
@@ -1087,6 +1181,7 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '700',
     color: '#003880',
+    flexShrink: 1,
   },
   segmentedTabTextActive: {
     color: '#FFFFFF',

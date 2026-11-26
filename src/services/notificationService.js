@@ -253,47 +253,65 @@ export const subscribeToUserNotifications = (userId, callback) => {
     return () => {};
   }
 
-  const q = query(
-    collection(db, 'notifications'),
-    where('userId', 'in', [userId, 'all']),
-    orderBy('createdAt', 'desc')
-  );
+  try {
+    const q = query(
+      collection(db, 'notifications'),
+      where('userId', 'in', [userId, 'all']),
+      orderBy('createdAt', 'desc')
+    );
 
-  return onSnapshot(
-    q,
-    (snapshot) => {
-      const notifs = [];
-      let unread = 0;
+    return onSnapshot(
+      q,
+      (snapshot) => {
+        const notifs = [];
+        let unread = 0;
 
-      snapshot.forEach((docSnap) => {
-        const item = { id: docSnap.id, ...docSnap.data() };
-        notifs.push(item);
-        if (!item.read) {
-          unread++;
-        }
-      });
-
-      callback({ notifications: notifs, unreadCount: unread });
-    },
-    (error) => {
-      console.log('[NOTIFICATION] Erreur écoute snapshot :', error.message);
-      // Fallback simple si l'index composé n'est pas encore prêt
-      const fallbackQ = query(
-        collection(db, 'notifications'),
-        where('userId', '==', userId)
-      );
-      return onSnapshot(fallbackQ, (snap) => {
-        const fallbackNotifs = [];
-        let fallbackUnread = 0;
-        snap.forEach((d) => {
-          const item = { id: d.id, ...d.data() };
-          fallbackNotifs.push(item);
-          if (!item.read) fallbackUnread++;
+        snapshot.forEach((docSnap) => {
+          const item = { id: docSnap.id, ...docSnap.data() };
+          notifs.push(item);
+          if (!item.read) {
+            unread++;
+          }
         });
-        callback({ notifications: fallbackNotifs, unreadCount: fallbackUnread });
-      });
-    }
-  );
+
+        callback({ notifications: notifs, unreadCount: unread });
+      },
+      (error) => {
+        console.warn('[NOTIFICATION] Erreur écoute snapshot :', error?.message || error);
+        // Fallback simple si l'index composé n'est pas encore prêt
+        try {
+          const fallbackQ = query(
+            collection(db, 'notifications'),
+            where('userId', '==', userId)
+          );
+          return onSnapshot(
+            fallbackQ, 
+            (snap) => {
+              const fallbackNotifs = [];
+              let fallbackUnread = 0;
+              snap.forEach((d) => {
+                const item = { id: d.id, ...d.data() };
+                fallbackNotifs.push(item);
+                if (!item.read) fallbackUnread++;
+              });
+              callback({ notifications: fallbackNotifs, unreadCount: fallbackUnread });
+            },
+            (err) => {
+              console.warn('[NOTIFICATION] Erreur écoute fallback :', err?.message || err);
+              callback({ notifications: [], unreadCount: 0 });
+            }
+          );
+        } catch (fallbackErr) {
+          console.warn('[NOTIFICATION] Exception écoute fallback :', fallbackErr?.message || fallbackErr);
+          callback({ notifications: [], unreadCount: 0 });
+        }
+      }
+    );
+  } catch (err) {
+    console.warn('[NOTIFICATION] Erreur subscribeToUserNotifications :', err?.message || err);
+    callback({ notifications: [], unreadCount: 0 });
+    return () => {};
+  }
 };
 
 /**

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { 
   StyleSheet, 
   Text, 
@@ -31,12 +31,18 @@ import {
   getUniversitesByRegion, 
   getUniversitesByVille,
   getUniversitesByZone,
-  isPropertyInZone 
+  isPropertyInZone,
+  getUniversitiesForCountry,
+  getCitiesForCountry,
 } from '../services/universityService';
+import { AFRICAN_COUNTRIES, DEFAULT_COUNTRY, getCountryById } from '../services/countryService';
+import CountryPickerModal from '../components/CountryPickerModal';
+import { useTranslation } from '../i18n';
 
 const TYPES_LOGEMENT = ['Studio', 'Chambre', 'Appartement', 'Colocation', 'Villa'];
 
 export default function BailleurHomeScreen({ navigation }) {
+  const { t } = useTranslation();
   const [biens, setBiens] = useState([]);
   const [loading, setLoading] = useState(true);
   const [modalVisible, setModalVisible] = useState(false);
@@ -48,6 +54,8 @@ export default function BailleurHomeScreen({ navigation }) {
   const [subInfo, setSubInfo] = useState(null);
 
   // Formulaire state
+  const [selectedCountry, setSelectedCountry] = useState(DEFAULT_COUNTRY);
+  const [countryModalVisible, setCountryModalVisible] = useState(false);
   const [titre, setTitre] = useState('');
   const [description, setDescription] = useState('');
   const [prix, setPrix] = useState('');
@@ -64,6 +72,25 @@ export default function BailleurHomeScreen({ navigation }) {
   const [longitude, setLongitude] = useState(-17.44667);
   const [gpsCapturing, setGpsCapturing] = useState(false);
   const [unreadNotifsCount, setUnreadNotifsCount] = useState(0);
+
+  // Régions / Villes du pays sélectionné
+  const availableRegions = useMemo(() => {
+    return getCitiesForCountry(selectedCountry?.id || 'SN');
+  }, [selectedCountry]);
+
+  const currentRegion = useMemo(() => {
+    return availableRegions.find((r) => r.id === selectedRegion) || availableRegions[0] || SENEGAL_REGIONS[0];
+  }, [availableRegions, selectedRegion]);
+
+  const currentRegionUnis = useMemo(() => {
+    if (selectedCountry?.id === 'SN' || !selectedCountry) {
+      return getUniversitesByZone(selectedRegion);
+    }
+    if (currentRegion?.universites && currentRegion.universites.length > 0) {
+      return currentRegion.universites;
+    }
+    return getUniversitiesForCountry(selectedCountry?.id);
+  }, [selectedCountry, selectedRegion, currentRegion]);
 
   // Initialisation des notifications Push & Écoute de la cloche en direct
   useEffect(() => {
@@ -126,7 +153,7 @@ export default function BailleurHomeScreen({ navigation }) {
     try {
       let { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== 'granted') {
-        Alert.alert("Permission refusée", "Veuillez autoriser l'accès à la position dans vos réglages pour capturer l'emplacement.");
+        Alert.alert(t('landlordHome.permissionDeniedTitle'), t('landlordHome.permissionGpsMsg'));
         setGpsCapturing(false);
         return;
       }
@@ -136,10 +163,10 @@ export default function BailleurHomeScreen({ navigation }) {
       
       setLatitude(lat);
       setLongitude(lng);
-      Alert.alert("Position enregistrée 📍", `Coordonnées capturées avec succès :\nLat: ${lat.toFixed(5)}, Lng: ${lng.toFixed(5)}`);
+      Alert.alert(t('landlordHome.positionSavedTitle'), t('landlordHome.positionSavedMsg', { lat: lat.toFixed(5), lng: lng.toFixed(5) }));
     } catch (error) {
       console.error("Erreur géolocalisation :", error);
-      Alert.alert("Erreur", "Impossible de récupérer votre position actuelle.");
+      Alert.alert(t('common.error'), t('landlordHome.gpsErrorMsg'));
     } finally {
       setGpsCapturing(false);
     }
@@ -149,7 +176,7 @@ export default function BailleurHomeScreen({ navigation }) {
   const handlePickMedias = async () => {
     const remainingSlots = 8 - mediasUris.length;
     if (remainingSlots <= 0) {
-      Alert.alert("Limite atteinte", "Vous avez déjà atteint le maximum de 8 photos ou vidéos.");
+      Alert.alert(t('landlordHome.limitReachedTitle'), t('landlordHome.max8PhotosMsg'));
       return;
     }
 
@@ -183,33 +210,61 @@ export default function BailleurHomeScreen({ navigation }) {
     setMediasUris(prevMedias => prevMedias.filter((_, index) => index !== indexToRemove));
   };
 
-  // Sélection d'une région administrative du Sénégal
+  // Sélection d'un pays africain
+  const handleSelectCountry = (country) => {
+    setSelectedCountry(country);
+    const regs = getCitiesForCountry(country.id);
+    if (regs && regs.length > 0) {
+      const firstReg = regs[0];
+      setSelectedRegion(firstReg.id);
+      if (firstReg.villes && firstReg.villes.length > 0) {
+        setSelectedVille(firstReg.villes[0].id);
+        setLatitude(firstReg.villes[0].lat || 14.69275);
+        setLongitude(firstReg.villes[0].lng || -17.44667);
+      }
+      if (firstReg.defaultUni) {
+        setUniversiteId(firstReg.defaultUni);
+      } else if (firstReg.universites && firstReg.universites.length > 0) {
+        setUniversiteId(firstReg.universites[0].id);
+      }
+    }
+  };
+
+  // Sélection d'une région administrative
   const handleSelectRegion = (region) => {
     setSelectedRegion(region.id);
     const defaultVilleObj = region.villes && region.villes[0];
     if (defaultVilleObj) {
       setSelectedVille(defaultVilleObj.id);
-      setLatitude(defaultVilleObj.lat);
-      setLongitude(defaultVilleObj.lng);
+      setLatitude(defaultVilleObj.lat || 14.69275);
+      setLongitude(defaultVilleObj.lng || -17.44667);
     }
-    const zoneUnis = getUniversitesByZone(region.id);
-    if (zoneUnis.length > 0) {
-      if (!zoneUnis.some(u => u.id === universiteId)) {
-        setUniversiteId(zoneUnis[0].id);
+    if (selectedCountry?.id === 'SN' || !selectedCountry) {
+      const zoneUnis = getUniversitesByZone(region.id);
+      if (zoneUnis.length > 0) {
+        if (!zoneUnis.some(u => u.id === universiteId)) {
+          setUniversiteId(zoneUnis[0].id);
+        }
+      } else if (region.defaultUni) {
+        setUniversiteId(region.defaultUni);
       }
-    } else if (region.defaultUni) {
-      setUniversiteId(region.defaultUni);
+    } else {
+      if (region.universites && region.universites.length > 0) {
+        setUniversiteId(region.universites[0].id);
+      } else if (region.defaultUni) {
+        setUniversiteId(region.defaultUni);
+      }
     }
   };
 
   // Sélection d'une ville précise dans la région
   const handleSelectVille = (ville) => {
     setSelectedVille(ville.id);
-    setLatitude(ville.lat);
-    setLongitude(ville.lng);
+    if (ville.lat) setLatitude(ville.lat);
+    if (ville.lng) setLongitude(ville.lng);
     
     // Si une université est située dans cette ville spécifique, la proposer
-    const cityUnis = getUniversitesByVille(ville.id);
+    const cityUnis = getUniversitesByVille(ville.id, selectedCountry?.id || 'SN');
     if (cityUnis.length > 0 && !cityUnis.some(u => u.id === universiteId)) {
       setUniversiteId(cityUnis[0].id);
     }
@@ -218,11 +273,11 @@ export default function BailleurHomeScreen({ navigation }) {
   const handleOpenModal = (bien = null) => {
     if (subInfo?.status === 'expired' && !bien) {
       Alert.alert(
-        "Abonnement requis",
-        "Votre période d'essai de 30 jours est terminée. Choisissez une formule pour continuer à publier vos logements.",
+        t('landlordHome.subscriptionRequiredTitle'),
+        t('landlordHome.subscriptionRequiredMsg'),
         [
-          { text: "Plus tard", style: "cancel" },
-          { text: "Voir les formules (dès 1 000 F)", onPress: () => navigation.navigate('Subscription') }
+          { text: t('landlordHome.later'), style: "cancel" },
+          { text: t('landlordHome.viewPlansFrom1500'), onPress: () => navigation.navigate('Subscription') }
         ]
       );
       return;
@@ -230,14 +285,16 @@ export default function BailleurHomeScreen({ navigation }) {
 
     if (statutValidation !== 'valide' && !bien) {
       Alert.alert(
-        "Compte en attente",
-        "Votre compte bailleur n'a pas encore été validé par l'administrateur. Vous ne pouvez pas publier de nouveau logement pour le moment."
+        t('landlordHome.pendingAccount'),
+        t('landlordHome.pendingAccountDesc')
       );
       return;
     }
 
     if (bien) {
       setEditingBien(bien);
+      const c = getCountryById(bien.countryId || 'SN');
+      setSelectedCountry(c);
       setTitre(bien.titre || '');
       setDescription(bien.description || '');
       setPrix(String(bien.prix || ''));
@@ -251,13 +308,15 @@ export default function BailleurHomeScreen({ navigation }) {
 
       let initialReg = bien.localisation?.zoneId || bien.localisation?.regionId;
       if (!initialReg) {
-        const matchingUni = UNIVERSITES.find(u => u.id === bien.universiteId);
-        initialReg = matchingUni?.regionId || 'DAKAR';
+        const countryUnis = (c.id === 'SN' ? UNIVERSITES : getUniversitiesForCountry(c.id));
+        const matchingUni = countryUnis.find(u => u.id === bien.universiteId);
+        initialReg = matchingUni?.regionId || matchingUni?.villeId || 'DAKAR';
       }
       setSelectedRegion(initialReg);
       setSelectedVille(bien.localisation?.villeId || 'DAKAR_VILLE');
     } else {
       setEditingBien(null);
+      setSelectedCountry(DEFAULT_COUNTRY);
       setTitre('');
       setDescription('');
       setPrix('');
@@ -276,12 +335,12 @@ export default function BailleurHomeScreen({ navigation }) {
 
   const handleSaveProperty = async () => {
     if (!titre.trim() || !prix || !type.trim() || !adresse.trim()) {
-      Alert.alert("Champs obligatoires", "Veuillez renseigner au minimum le titre, le type, le loyer et l'adresse.");
+      Alert.alert(t('landlordHome.requiredFieldsTitle'), t('landlordHome.requiredFieldsMsg'));
       return;
     }
 
     if (mediasUris.length > 8) {
-      Alert.alert("Limite atteinte", "Vous ne pouvez pas dépasser 8 photos ou vidéos par bien.");
+      Alert.alert(t('landlordHome.limitReachedTitle'), t('landlordHome.limitReachedMsg'));
       return;
     }
 
@@ -305,15 +364,19 @@ export default function BailleurHomeScreen({ navigation }) {
         }
       }
 
-      const currentReg = getRegionById(selectedRegion);
-      const activeVille = currentReg.villes.find(v => v.id === selectedVille) || currentReg.villes[0];
-      const matchingUni = UNIVERSITES.find(u => u.id === universiteId);
+      const countryCode = selectedCountry?.id || 'SN';
+      const allCountryUnis = countryCode === 'SN' ? UNIVERSITES : getUniversitiesForCountry(countryCode);
+      const matchingUni = allCountryUnis.find(u => u.id === universiteId);
+      const activeVille = currentRegion?.villes?.find(v => v.id === selectedVille) || currentRegion?.villes?.[0];
 
       const propertyData = {
         titre: titre.trim(),
         description: description.trim(),
         prix: Number(prix),
         type: type.trim(),
+        countryId: countryCode,
+        countryNom: selectedCountry?.name || 'Sénégal',
+        currency: selectedCountry?.currency || 'FCFA',
         universiteId,
         universiteNom: matchingUni?.nom || universiteId,
         telephoneProprietaire: telephone.trim(),
@@ -322,9 +385,9 @@ export default function BailleurHomeScreen({ navigation }) {
           adresse: adresse.trim(),
           zoneId: selectedRegion,
           regionId: selectedRegion,
-          region: currentReg.nom,
+          region: currentRegion?.nom || selectedRegion,
           villeId: selectedVille,
-          ville: activeVille?.nom || 'Dakar',
+          ville: activeVille?.nom || currentRegion?.nom || selectedCountry?.primaryCity || 'Dakar',
           latitude,
           longitude,
         },
@@ -335,18 +398,18 @@ export default function BailleurHomeScreen({ navigation }) {
       if (editingBien) {
         const docRef = doc(db, "properties", editingBien.id);
         await updateDoc(docRef, propertyData);
-        Alert.alert("Succès ✨", "Votre annonce a été mise à jour.");
+        Alert.alert(t('common.success'), t('landlordHome.updateSuccess'));
       } else {
         propertyData.createdAt = new Date();
         const newDoc = await addDoc(collection(db, "properties"), propertyData);
-        Alert.alert("Félicitations 🎉", "Votre bien a été publié avec succès sur Logetudiant.");
+        Alert.alert(t('common.success'), t('landlordHome.publishSuccess'));
 
         // Notification automatique diffusée aux étudiants
         broadcastNotification({
           title: "Nouveau logement étudiant 🏠",
-          body: `${propertyData.titre || 'Un logement'} est disponible près de ${propertyData.universiteId || 'votre campus'} - ${propertyData.prix} FCFA.`,
+          body: `${propertyData.titre || 'Un logement'} est disponible près de ${propertyData.universiteId || 'votre campus'} - ${propertyData.prix} ${propertyData.currency || 'FCFA'}.`,
           type: 'new_property',
-          data: { propertyId: newDoc.id, universiteId: propertyData.universiteId }
+          data: { propertyId: newDoc.id, universiteId: propertyData.universiteId, countryId: propertyData.countryId }
         }).catch(() => {});
       }
 
@@ -354,23 +417,23 @@ export default function BailleurHomeScreen({ navigation }) {
       fetchMesBiens();
     } catch (error) {
       console.error("Erreur enregistrement bien :", error);
-      Alert.alert("Erreur", "Impossible d'enregistrer le logement pour le moment.");
+      Alert.alert(t('common.error'), "Impossible d'enregistrer le logement pour le moment.");
     }
   };
 
   const handleDeleteProperty = (id) => {
     Alert.alert(
-      "Confirmation",
-      "Voulez-vous vraiment supprimer cette annonce ?",
+      t('common.confirm'),
+      t('landlordHome.confirmDelete'),
       [
-        { text: "Annuler", style: "cancel" },
+        { text: t('common.cancel'), style: "cancel" },
         {
-          text: "Supprimer",
+          text: t('common.delete'),
           style: "destructive",
           onPress: async () => {
             try {
               await deleteDoc(doc(db, "properties", id));
-              Alert.alert("Supprimé", "L'annonce a été retirée.");
+              Alert.alert(t('common.success'), t('landlordHome.deleteListing'));
               fetchMesBiens();
             } catch (error) {
               console.error("Erreur suppression :", error);
@@ -423,34 +486,37 @@ export default function BailleurHomeScreen({ navigation }) {
         style={styles.propertyImage} 
       />
       <View style={styles.propertyBadge}>
-        <Text style={styles.propertyBadgeText}>{item.universiteId}</Text>
+        <Text style={styles.propertyBadgeText}>
+          {getCountryById(item.countryId)?.flag || '🇸🇳'} {item.universiteId}
+        </Text>
       </View>
 
       <View style={styles.cardContent}>
         <Text style={styles.propertyTitle}>{item.titre}</Text>
-        <Text style={styles.propertyType}>Type : {item.type}</Text>
+        <Text style={styles.propertyType}>
+          {t('landlordHome.typeLabel', { type: t(`landlordHome.types.${item.type}`) || item.type })}
+        </Text>
         <Text style={styles.propertyAddress} numberOfLines={1}>
-          📍 {item.localisation?.ville ? `${item.localisation.ville} • ` : ''}{item.localisation?.adresse || 'Adresse non spécifiée'}
+          📍 {item.localisation?.ville ? `${item.localisation.ville} • ` : ''}{item.localisation?.adresse || t('landlordHome.addressNotSpecified')}
         </Text>
         <Text style={styles.propertyDescription} numberOfLines={2}>{item.description}</Text>
-        <Text style={styles.propertyPrice}>{item.prix} FCFA <Text style={styles.period}>/ mois</Text></Text>
+        <Text style={styles.propertyPrice}>
+          {item.prix?.toLocaleString ? item.prix.toLocaleString('fr-FR') : item.prix} {item.currency || 'FCFA'} <Text style={styles.period}>{t('landlordHome.perMonth')}</Text>
+        </Text>
 
         <View style={styles.cardActions}>
           <TouchableOpacity style={styles.editButton} onPress={() => handleOpenModal(item)}>
             <Ionicons name="create-outline" size={15} color="#003880" style={{ marginRight: 4 }} />
-            <Text style={styles.editButtonText}>Modifier</Text>
+            <Text style={styles.editButtonText}>{t('landlordHome.editListing')}</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.deleteButton} onPress={() => handleDeleteProperty(item.id)}>
             <Ionicons name="trash-outline" size={15} color="#DC2626" style={{ marginRight: 4 }} />
-            <Text style={styles.deleteButtonText}>Supprimer</Text>
+            <Text style={styles.deleteButtonText}>{t('landlordHome.deleteListing')}</Text>
           </TouchableOpacity>
         </View>
       </View>
     </View>
   );
-
-  const currentRegion = getRegionById(selectedRegion);
-  const currentRegionUnis = getUniversitesByZone(selectedRegion);
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -463,8 +529,8 @@ export default function BailleurHomeScreen({ navigation }) {
             resizeMode="contain" 
           />
           <View>
-            <Text style={styles.navBrand}>Espace Bailleur</Text>
-            <Text style={styles.navTagline}>Gérez vos biens immobiliers</Text>
+            <Text style={styles.navBrand}>{t('landlordHome.title')}</Text>
+            <Text style={styles.navTagline}>{t('landlordHome.subtitle')}</Text>
           </View>
         </View>
 
@@ -517,10 +583,10 @@ export default function BailleurHomeScreen({ navigation }) {
           <View style={styles.warningBanner}>
             <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 4 }}>
               <Ionicons name="alert-circle" size={18} color="#D97706" style={{ marginRight: 6 }} />
-              <Text style={styles.warningTitle}>Compte en attente de validation</Text>
+              <Text style={styles.warningTitle}>{t('landlordHome.pendingAccount')}</Text>
             </View>
             <Text style={styles.warningText}>
-              Votre compte bailleur n'a pas encore été validé par l'administrateur. La publication de nouveaux logements est temporairement restreinte.
+              {t('landlordHome.pendingAccountDesc')}
             </Text>
           </View>
         )}
@@ -537,8 +603,8 @@ export default function BailleurHomeScreen({ navigation }) {
           <View style={{ flex: 1, marginLeft: 10 }}>
             <View style={{ flexDirection: 'row', alignItems: 'center' }}>
               <Text style={styles.subBannerTitle}>
-                {subInfo?.status === 'active' ? 'Abonnement Pro Actif' :
-                 subInfo?.status === 'expired' ? 'Abonnement Expiré' : "30 Jours d'Essai Gratuit"}
+                {subInfo?.status === 'active' ? t('landlordHome.proActiveTitle') :
+                 subInfo?.status === 'expired' ? t('landlordHome.expiredTitle') : t('landlordHome.trialTitle')}
               </Text>
               <View style={[
                 styles.subBannerBadge,
@@ -550,13 +616,13 @@ export default function BailleurHomeScreen({ navigation }) {
                   subInfo?.status === 'active' && { color: '#059669' },
                   subInfo?.status === 'expired' && { color: '#DC2626' },
                 ]}>
-                  {subInfo?.status === 'active' ? `${subInfo.daysLeft}j restants` :
-                   subInfo?.status === 'expired' ? 'Renouveler' : `${subInfo?.daysLeft || 30}j offerts`}
+                  {subInfo?.status === 'active' ? t('landlordHome.daysLeft', { days: subInfo.daysLeft }) :
+                   subInfo?.status === 'expired' ? t('landlordHome.renew') : t('landlordHome.daysOffered', { days: subInfo?.daysLeft || 30 })}
                 </Text>
               </View>
             </View>
             <Text style={styles.subBannerSubtitle} numberOfLines={1}>
-              {subInfo?.status === 'expired' ? 'Touchez ici pour choisir votre pack dès 1 000 FCFA' : 'Publications illimitées & contact direct étudiants'}
+              {subInfo?.status === 'expired' ? t('landlordHome.subBannerExpiredDesc') : t('landlordHome.subBannerDesc')}
             </Text>
           </View>
           <Ionicons name="chevron-forward" size={16} color="#003880" />
@@ -568,7 +634,7 @@ export default function BailleurHomeScreen({ navigation }) {
         >
           <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}>
             <Ionicons name="add-circle" size={20} color="#FFFFFF" style={{ marginRight: 8 }} />
-            <Text style={styles.addButtonText}>Publier un nouveau logement</Text>
+            <Text style={styles.addButtonText}>{t('landlordHome.publishProperty')}</Text>
           </View>
         </TouchableOpacity>
 
@@ -579,7 +645,7 @@ export default function BailleurHomeScreen({ navigation }) {
               onPress={() => setSelectedFilterZone('TOUS')}
             >
               <Text style={[styles.filterText, selectedFilterZone === 'TOUS' && styles.filterTextActive]}>
-                Toutes les zones ({biens.length})
+                {t('landlordHome.allZones')} ({biens.length})
               </Text>
             </TouchableOpacity>
             {ZONES_SENEGAL.map((zone) => {
@@ -599,13 +665,13 @@ export default function BailleurHomeScreen({ navigation }) {
           </ScrollView>
         </View>
 
-        <Text style={styles.sectionTitle}>Mes biens publiés ({filteredBiens.length})</Text>
+        <Text style={styles.sectionTitle}>{t('landlordHome.myPropertiesCount', { count: filteredBiens.length })}</Text>
 
         {loading ? (
           <ActivityIndicator size="large" color="#003880" style={{ marginTop: 40 }} />
         ) : filteredBiens.length === 0 ? (
           <View style={styles.emptyContainer}>
-            <Text style={styles.emptyText}>Aucun logement trouvé pour cette sélection.</Text>
+            <Text style={styles.emptyText}>{t('landlordHome.noPropertiesMatched')}</Text>
           </View>
         ) : (
           filteredBiens.map(renderPropertyCard)
@@ -620,8 +686,8 @@ export default function BailleurHomeScreen({ navigation }) {
             {/* En-tête de la modale */}
             <View style={styles.modalHeader}>
               <View>
-                <Text style={styles.modalTitle}>{editingBien ? 'Modifier le logement' : 'Publier un logement'}</Text>
-                <Text style={styles.modalSubtitle}>Complétez les informations pour attirer les étudiants</Text>
+                <Text style={styles.modalTitle}>{editingBien ? t('landlordHome.editModalTitle') : t('landlordHome.publishModalTitle')}</Text>
+                <Text style={styles.modalSubtitle}>{t('landlordHome.publishModalSubtitle')}</Text>
               </View>
               <TouchableOpacity style={styles.closeBtn} onPress={() => setModalVisible(false)}>
                 <Ionicons name="close" size={22} color="#64748B" />
@@ -634,33 +700,35 @@ export default function BailleurHomeScreen({ navigation }) {
               <View style={styles.formSection}>
                 <View style={styles.sectionHeadingRow}>
                   <Ionicons name="pricetag" size={16} color="#003880" style={{ marginRight: 6 }} />
-                  <Text style={styles.sectionHeading}>Informations de base</Text>
+                  <Text style={styles.sectionHeading}>{t('landlordHome.basicInfoSection')}</Text>
                 </View>
 
-                <Text style={styles.fieldLabel}>Titre de l'annonce *</Text>
+                <Text style={styles.fieldLabel}>{t('landlordHome.listingTitleLabel')}</Text>
                 <TextInput 
                   style={styles.input} 
-                  placeholder="Studio moderne proche campus" 
+                  placeholder={t('landlordHome.listingTitlePlaceholder')} 
                   placeholderTextColor="#A0AEC0"
                   value={titre} 
                   onChangeText={setTitre} 
                   maxLength={40}
                 />
 
-                <Text style={styles.fieldLabel}>Type de bien *</Text>
+                <Text style={styles.fieldLabel}>{t('landlordHome.propertyTypeLabel')}</Text>
                 <View style={styles.typeChipsContainer}>
-                  {TYPES_LOGEMENT.map((t) => (
+                  {TYPES_LOGEMENT.map((typeItem) => (
                     <TouchableOpacity
-                      key={t}
-                      style={[styles.typeChip, type === t && styles.typeChipSelected]}
-                      onPress={() => setType(t)}
+                      key={typeItem}
+                      style={[styles.typeChip, type === typeItem && styles.typeChipSelected]}
+                      onPress={() => setType(typeItem)}
                     >
-                      <Text style={[styles.typeChipText, type === t && styles.typeChipTextSelected]}>{t}</Text>
+                      <Text style={[styles.typeChipText, type === typeItem && styles.typeChipTextSelected]}>
+                        {t(`landlordHome.types.${typeItem}`) || typeItem}
+                      </Text>
                     </TouchableOpacity>
                   ))}
                 </View>
 
-                <Text style={styles.fieldLabel}>Loyer mensuel (FCFA) *</Text>
+                <Text style={styles.fieldLabel}>{t('landlordHome.monthlyRentLabel', { currency: selectedCountry.currency || 'FCFA' })}</Text>
                 <View style={styles.priceInputWrapper}>
                   <TextInput 
                     style={styles.priceInputField} 
@@ -669,10 +737,10 @@ export default function BailleurHomeScreen({ navigation }) {
                     value={prix} 
                     onChangeText={setPrix} 
                     keyboardType="numeric" 
-                    maxLength={7}
+                    maxLength={10}
                   />
                   <View style={styles.currencyBadge}>
-                    <Text style={styles.currencyBadgeText}>FCFA / mois</Text>
+                    <Text style={styles.currencyBadgeText}>{selectedCountry.currency || 'FCFA'} {t('landlordHome.perMonth')}</Text>
                   </View>
                 </View>
               </View>
@@ -681,16 +749,36 @@ export default function BailleurHomeScreen({ navigation }) {
               <View style={styles.formSection}>
                 <View style={styles.sectionHeadingRow}>
                   <Ionicons name="location" size={16} color="#003880" style={{ marginRight: 6 }} />
-                  <Text style={styles.sectionHeading}>Région, Ville & Campus Universitaire</Text>
+                  <Text style={styles.sectionHeading}>{t('landlordHome.locationSection')}</Text>
                 </View>
 
-                {/* 1. SÉLECTION DE LA RÉGION ADMINISTRATIVE */}
-                <Text style={styles.fieldLabel}>1. Région administrative du logement *</Text>
+                {/* 0. SÉLECTION DU PAYS AFRICAIN */}
+                <Text style={styles.fieldLabel}>{t('landlordHome.countryStepLabel')}</Text>
+                <TouchableOpacity
+                  style={styles.countryPickerCard}
+                  onPress={() => setCountryModalVisible(true)}
+                  activeOpacity={0.75}
+                >
+                  <Text style={styles.countryFlagLarge}>{selectedCountry.flag}</Text>
+                  <View style={{ flex: 1, marginLeft: 10 }}>
+                    <Text style={styles.countryCardName}>{selectedCountry.name}</Text>
+                    <Text style={styles.countryCardDetails}>
+                      {t('landlordHome.currencyBadge', { currency: selectedCountry.currency, dialCode: selectedCountry.dialCode })}
+                    </Text>
+                  </View>
+                  <View style={styles.countryChangePill}>
+                    <Text style={styles.countryChangePillText}>{t('landlordHome.changeBtn')}</Text>
+                    <Ionicons name="chevron-forward" size={13} color="#003880" />
+                  </View>
+                </TouchableOpacity>
+
+                {/* 1. SÉLECTION DE LA RÉGION / VILLE */}
+                <Text style={styles.fieldLabel}>{t('landlordHome.regionStepLabel', { country: selectedCountry.name })}</Text>
                 <Text style={styles.fieldHelpText}>
-                  Sélectionnez la région où se trouve votre bien (chaque région synchronise ses villes et universités) :
+                  {t('landlordHome.regionSelectHelp')}
                 </Text>
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.regionScroll}>
-                  {SENEGAL_REGIONS.map((reg) => (
+                  {availableRegions.map((reg) => (
                     <TouchableOpacity
                       key={reg.id}
                       style={[styles.regionChip, selectedRegion === reg.id && styles.regionChipSelected]}
@@ -706,13 +794,13 @@ export default function BailleurHomeScreen({ navigation }) {
 
                 {/* 2. SÉLECTION DE LA VILLE DE CETTE RÉGION */}
                 <Text style={styles.fieldLabel}>
-                  2. Ville / Commune ({currentRegion.nom}) *
+                  {t('landlordHome.cityStepLabel', { region: currentRegion.nom })}
                 </Text>
                 <Text style={styles.fieldHelpText}>
                   {currentRegion.description} :
                 </Text>
                 <View style={styles.villeChipsWrapper}>
-                  {currentRegion.villes.map((v) => (
+                  {(currentRegion.villes || []).map((v) => (
                     <TouchableOpacity
                       key={v.id}
                       style={[styles.villeChip, selectedVille === v.id && styles.villeChipSelected]}
@@ -728,10 +816,10 @@ export default function BailleurHomeScreen({ navigation }) {
 
                 {/* 3. CAMPUS & UNIVERSITÉS DE CETTE RÉGION */}
                 <Text style={styles.fieldLabel}>
-                  3. Campus / Université partenaire ({currentRegion.nom}) *
+                  {t('landlordHome.campusStepLabel', { region: currentRegion.nom })}
                 </Text>
                 <Text style={styles.fieldHelpText}>
-                  Universités et instituts de référence situés dans cette région et ses alentours :
+                  {t('landlordHome.campusSelectHelp')}
                 </Text>
                 <View style={styles.zoneChipsWrapper}>
                   {currentRegionUnis.map((uni) => (
@@ -748,10 +836,10 @@ export default function BailleurHomeScreen({ navigation }) {
                   ))}
                 </View>
 
-                <Text style={styles.fieldLabel}>Adresse précise du logement *</Text>
+                <Text style={styles.fieldLabel}>{t('landlordHome.addressLabel')}</Text>
                 <TextInput 
                   style={styles.input} 
-                  placeholder="Ex : Bambey Cité, Saint-Louis, Cité Lamy, Mermoz..." 
+                  placeholder={t('landlordHome.addressPlaceholder')} 
                   placeholderTextColor="#A0AEC0"
                   value={adresse} 
                   onChangeText={setAdresse} 
@@ -759,12 +847,12 @@ export default function BailleurHomeScreen({ navigation }) {
                 />
 
                 {/* CARTE GPS PRO */}
-                <Text style={styles.fieldLabel}>Localisation GPS</Text>
+                <Text style={styles.fieldLabel}>{t('landlordHome.gpsLabel')}</Text>
                 <View style={styles.gpsCardPro}>
                   <View style={styles.gpsHeader}>
                     <View style={styles.gpsCoordsBox}>
                       <Text style={styles.gpsCoordsTitle}>
-                        Position GPS ({currentRegion.nom} - {currentRegion.villes.find(v => v.id === selectedVille)?.nom || 'Sénégal'})
+                        {t('landlordHome.gpsTitle', { region: currentRegion.nom, city: currentRegion.villes.find(v => v.id === selectedVille)?.nom || 'Sénégal' })}
                       </Text>
                       <Text style={styles.gpsCoordsValue}>
                         Lat : <Text style={styles.gpsBold}>{typeof latitude === 'number' ? latitude.toFixed(5) : latitude}</Text>  |  Lng : <Text style={styles.gpsBold}>{typeof longitude === 'number' ? longitude.toFixed(5) : longitude}</Text>
@@ -780,7 +868,7 @@ export default function BailleurHomeScreen({ navigation }) {
                     >
                       <Ionicons name="navigate-outline" size={15} color="#FFF" style={{ marginRight: 6 }} />
                       <Text style={styles.gpsCaptureBtnText}>
-                        {gpsCapturing ? 'Détection...' : 'Utiliser mon GPS actuel'}
+                        {gpsCapturing ? t('landlordHome.detectingGps') : t('landlordHome.useCurrentGps')}
                       </Text>
                     </TouchableOpacity>
 
@@ -789,7 +877,7 @@ export default function BailleurHomeScreen({ navigation }) {
                       onPress={() => Linking.openURL(`https://www.google.com/maps/search/?api=1&query=${latitude},${longitude}`)}
                     >
                       <Ionicons name="map-outline" size={15} color="#003880" style={{ marginRight: 6 }} />
-                      <Text style={styles.gpsVerifyBtnText}>Vérifier sur Maps</Text>
+                      <Text style={styles.gpsVerifyBtnText}>{t('landlordHome.verifyOnMaps')}</Text>
                     </TouchableOpacity>
                   </View>
                 </View>
@@ -799,13 +887,13 @@ export default function BailleurHomeScreen({ navigation }) {
               <View style={styles.formSection}>
                 <View style={styles.sectionHeadingRow}>
                   <Ionicons name="call" size={16} color="#003880" style={{ marginRight: 6 }} />
-                  <Text style={styles.sectionHeading}>Contact direct</Text>
+                  <Text style={styles.sectionHeading}>{t('landlordHome.directContactSection')}</Text>
                 </View>
 
-                <Text style={styles.fieldLabel}>Numéro WhatsApp / Téléphone *</Text>
+                <Text style={styles.fieldLabel}>{t('landlordHome.phoneWhatsappLabel')}</Text>
                 <TextInput 
                   style={styles.input} 
-                  placeholder="Numéro WhatsApp (9 chiffres)" 
+                  placeholder={t('landlordHome.phoneWhatsappPlaceholder')} 
                   placeholderTextColor="#A0AEC0"
                   value={telephone} 
                   onChangeText={setTelephone} 
@@ -819,17 +907,17 @@ export default function BailleurHomeScreen({ navigation }) {
                 <View style={styles.sectionHeaderBetween}>
                   <View style={styles.sectionHeadingRow}>
                     <Ionicons name="images" size={16} color="#003880" style={{ marginRight: 6 }} />
-                    <Text style={styles.sectionHeading}>Photos & Vidéos</Text>
+                    <Text style={styles.sectionHeading}>{t('landlordHome.photosVideosSection')}</Text>
                   </View>
                   <View style={styles.counterPill}>
-                    <Text style={styles.counterPillText}>{mediasUris.length} / 8 fichiers</Text>
+                    <Text style={styles.counterPillText}>{t('landlordHome.filesCounter', { count: mediasUris.length })}</Text>
                   </View>
                 </View>
 
                 <TouchableOpacity style={styles.uploadDashedZone} onPress={handlePickMedias}>
                   <Ionicons name="cloud-upload-outline" size={38} color="#003880" style={{ marginBottom: 6 }} />
-                  <Text style={styles.uploadTitle}>Ajouter des photos du logement</Text>
-                  <Text style={styles.uploadSubtitle}>Sélectionnez jusqu'à 8 photos pour valoriser votre annonce</Text>
+                  <Text style={styles.uploadTitle}>{t('landlordHome.addPhotosTitle')}</Text>
+                  <Text style={styles.uploadSubtitle}>{t('landlordHome.addPhotosSubtitle')}</Text>
                 </TouchableOpacity>
 
                 {mediasUris.length > 0 && (
@@ -850,11 +938,11 @@ export default function BailleurHomeScreen({ navigation }) {
               <View style={styles.formSection}>
                 <View style={styles.sectionHeadingRow}>
                   <Ionicons name="document-text" size={16} color="#003880" style={{ marginRight: 6 }} />
-                  <Text style={styles.sectionHeading}>Description détaillée</Text>
+                  <Text style={styles.sectionHeading}>{t('landlordHome.detailedDescSection')}</Text>
                 </View>
                 <TextInput 
                   style={[styles.input, styles.textArea]} 
-                  placeholder="Précisez les commodités (eau courante, wifi, compteur individuel, balcon, gardiennage, etc.)" 
+                  placeholder={t('landlordHome.descPlaceholder')} 
                   placeholderTextColor="#A0AEC0"
                   value={description} 
                   onChangeText={setDescription} 
@@ -866,13 +954,13 @@ export default function BailleurHomeScreen({ navigation }) {
               {/* BOUTONS D'ACTION */}
               <View style={styles.modalButtons}>
                 <TouchableOpacity style={styles.cancelButton} onPress={() => setModalVisible(false)}>
-                  <Text style={styles.cancelButtonText}>Annuler</Text>
+                  <Text style={styles.cancelButtonText}>{t('landlordHome.cancel')}</Text>
                 </TouchableOpacity>
 
                 <TouchableOpacity style={styles.saveButton} onPress={handleSaveProperty}>
                   <Ionicons name="checkmark-circle-outline" size={18} color="#FFF" style={{ marginRight: 6 }} />
                   <Text style={styles.saveButtonText}>
-                    {editingBien ? 'Enregistrer les modifications' : "Publier l'annonce"}
+                    {editingBien ? t('landlordHome.saveChangesBtn') : t('landlordHome.publishListingBtn')}
                   </Text>
                 </TouchableOpacity>
               </View>
@@ -881,6 +969,14 @@ export default function BailleurHomeScreen({ navigation }) {
           </View>
         </View>
       </Modal>
+
+      {/* SÉLECTEUR DE PAYS AFRICAINS */}
+      <CountryPickerModal
+        visible={countryModalVisible}
+        onClose={() => setCountryModalVisible(false)}
+        onSelectCountry={handleSelectCountry}
+        selectedCountry={selectedCountry}
+      />
     </SafeAreaView>
   );
 }
@@ -1260,4 +1356,45 @@ const styles = StyleSheet.create({
   cancelButtonText: { color: '#4A5568', fontWeight: 'bold', fontSize: 14 },
   saveButton: { flex: 2, backgroundColor: '#003880', padding: 14, borderRadius: 10, alignItems: 'center', elevation: 2 },
   saveButtonText: { color: '#fff', fontWeight: 'bold', fontSize: 14 },
+
+  // SÉLECTEUR DE PAYS AFRICAINS DANS LE FORMULAIRE
+  countryPickerCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1.5,
+    borderColor: '#E2E8F0',
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 14,
+  },
+  countryFlagLarge: {
+    fontSize: 28,
+  },
+  countryCardName: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: '#003880',
+  },
+  countryCardDetails: {
+    fontSize: 12,
+    color: '#64748B',
+    marginTop: 2,
+  },
+  countryChangePill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#EFF6FF',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#BFDBFE',
+  },
+  countryChangePillText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#003880',
+    marginRight: 2,
+  },
 });

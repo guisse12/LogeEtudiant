@@ -18,6 +18,10 @@ import {
   TouchableWithoutFeedback
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import CountryPickerModal, { CountryPickerButton } from '../components/CountryPickerModal';
+import { LanguagePill } from '../components/LanguageSelector';
+import { useTranslation } from '../i18n';
+import { DEFAULT_COUNTRY } from '../services/countryService';
 import { 
   loginUser, 
   sendPhoneVerificationCode, 
@@ -28,7 +32,10 @@ import {
 } from '../services/authService';
 
 export default function LoginScreen({ navigation, route }) {
-  const [identifier, setIdentifier] = useState(route?.params?.prefilledPhone || ''); // Numéro de téléphone (9 chiffres)
+  const { t } = useTranslation();
+  const [selectedCountry, setSelectedCountry] = useState(DEFAULT_COUNTRY);
+  const [countryModalVisible, setCountryModalVisible] = useState(false);
+  const [identifier, setIdentifier] = useState(route?.params?.prefilledPhone || ''); // Numéro de téléphone
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -89,13 +96,13 @@ export default function LoginScreen({ navigation, route }) {
   const handleLogin = async () => {
     const cleanId = identifier.trim();
     if (!cleanId || !password) {
-      Alert.alert('Champs requis', 'Veuillez saisir votre numéro de téléphone et votre mot de passe.');
+      Alert.alert(t('common.requiredFields'), t('auth.enterPhoneAndPass'));
       return;
     }
 
     setLoading(true);
     try {
-      const result = await loginUser(cleanId, password);
+      const result = await loginUser(cleanId, password, selectedCountry.dialCode);
 
       if (result.success) {
         const role = result.userInfo?.role;
@@ -120,43 +127,43 @@ export default function LoginScreen({ navigation, route }) {
       } else {
         if (result.errorType === 'NO_ACCOUNT') {
           Alert.alert(
-            "Compte introuvable",
-            result.error || "Aucun compte n'est associé à ce numéro de téléphone. Veuillez d'abord vous inscrire.",
+            t('auth.accountNotFound'),
+            t('auth.accountNotFoundDesc'),
             [
               { 
-                text: "S'inscrire", 
+                text: t('auth.registerLink'), 
                 onPress: () => navigation.navigate('Register', { prefilledPhone: cleanPhoneDigits(cleanId) }) 
               },
-              { text: "Annuler", style: "cancel" }
+              { text: t('common.cancel'), style: "cancel" }
             ]
           );
         } else if (result.errorType === 'NETWORK_ERROR') {
           Alert.alert(
-            "Connexion impossible",
-            result.error || "Veuillez vérifier votre connexion Internet puis réessayer."
+            t('auth.networkError'),
+            t('auth.networkErrorDesc')
           );
         } else if (result.errorType === 'WRONG_PASSWORD') {
           Alert.alert(
-            "Mot de passe incorrect",
-            result.error || "Le mot de passe saisi est incorrect.",
+            t('auth.wrongPassword'),
+            t('auth.wrongPasswordDesc'),
             [
               { 
-                text: "Mot de passe oublié ?", 
+                text: t('auth.forgotPassword'), 
                 onPress: () => {
                   setForgotId(cleanPhoneDigits(cleanId));
                   setForgotModalVisible(true);
                 } 
               },
-              { text: "Réessayer", style: "cancel" }
+              { text: t('common.retry'), style: "cancel" }
             ]
           );
         } else {
-          Alert.alert('Connexion impossible', result.error || 'Numéro de téléphone ou mot de passe incorrect.');
+          Alert.alert(t('auth.networkError'), t('auth.loginError'));
         }
       }
     } catch (error) {
       console.error("Erreur login :", error);
-      Alert.alert('Erreur', 'Une erreur technique est survenue. Veuillez vérifier votre connexion Internet.');
+      Alert.alert(t('common.error'), t('auth.networkErrorDesc'));
     } finally {
       setLoading(false);
     }
@@ -166,39 +173,39 @@ export default function LoginScreen({ navigation, route }) {
   const handleSendForgotCode = async () => {
     const clean = forgotId.trim();
     if (!clean) {
-      Alert.alert('Champ requis', 'Veuillez saisir votre numéro de téléphone.');
+      Alert.alert(t('common.requiredFields'), t('auth.enterValidPhone'));
       return;
     }
 
     setForgotLoading(true);
     try {
       // Vérifier si le compte existe avant d'envoyer le code
-      const check = await isPhoneAlreadyRegistered(clean);
+      const check = await isPhoneAlreadyRegistered(clean, selectedCountry.dialCode);
       if (check.networkError) {
-        Alert.alert("Connexion impossible", "Veuillez vérifier votre connexion Internet puis réessayer.");
+        Alert.alert(t('auth.networkError'), t('auth.networkErrorDesc'));
         setForgotLoading(false);
         return;
       }
       if (!check.registered) {
         setForgotLoading(false);
         Alert.alert(
-          "Compte introuvable",
-          "Aucun compte n'est associé à ce numéro de téléphone. Veuillez d'abord vous inscrire.",
+          t('auth.accountNotFound'),
+          t('auth.accountNotFoundDesc'),
           [
             { 
-              text: "S'inscrire", 
+              text: t('auth.registerLink'), 
               onPress: () => {
                 setForgotModalVisible(false);
-                navigation.navigate('Register', { prefilledPhone: cleanPhoneDigits(clean) });
+                navigation.navigate('Register', { prefilledPhone: cleanPhoneDigits(clean, selectedCountry.dialCode) });
               } 
             },
-            { text: "Annuler", style: "cancel" }
+            { text: t('common.cancel'), style: "cancel" }
           ]
         );
         return;
       }
 
-      const res = await sendPhoneVerificationCode(clean, 'recuperation');
+      const res = await sendPhoneVerificationCode(clean, 'recuperation', selectedCountry.dialCode);
       if (res.success) {
         setExpectedForgotCode(res.code);
         setForgotCountdown(300); // 5 minutes
@@ -207,13 +214,13 @@ export default function LoginScreen({ navigation, route }) {
         setTimeout(() => forgotOtpRef.current?.focus(), 350);
       } else {
         if (res.errorType === 'NETWORK_ERROR') {
-          Alert.alert("Connexion impossible", "Veuillez vérifier votre connexion Internet.");
+          Alert.alert(t('auth.networkError'), t('auth.networkErrorDesc'));
         } else {
-          Alert.alert('Erreur', res.error || 'Impossible d\'envoyer le code.');
+          Alert.alert(t('common.error'), res.error || t('auth.codeInvalid'));
         }
       }
     } catch (error) {
-      Alert.alert('Erreur', 'Une erreur est survenue lors de l\'envoi du code. Veuillez vérifier votre connexion.');
+      Alert.alert(t('common.error'), t('auth.networkErrorDesc'));
     } finally {
       setForgotLoading(false);
     }
@@ -224,13 +231,13 @@ export default function LoginScreen({ navigation, route }) {
     const clean = forgotId.trim();
     setForgotLoading(true);
     try {
-      const res = await sendPhoneVerificationCode(clean, 'recuperation');
+      const res = await sendPhoneVerificationCode(clean, 'recuperation', selectedCountry.dialCode);
       if (res.success) {
         setExpectedForgotCode(res.code);
         setForgotCountdown(300); // 5 minutes
       }
     } catch (e) {
-      Alert.alert('Erreur', 'Impossible de renvoyer le code.');
+      Alert.alert(t('common.error'), t('auth.codeInvalid'));
     } finally {
       setForgotLoading(false);
     }
@@ -242,27 +249,27 @@ export default function LoginScreen({ navigation, route }) {
     const cleanPass = newPassword.trim();
 
     if (cleanCode.length !== 6) {
-      Alert.alert('Code requis', 'Veuillez saisir le code de confirmation à 6 chiffres.');
+      Alert.alert(t('auth.codeRequired'), t('auth.incompleteCodeDesc'));
       return;
     }
 
     if (cleanPass.length < 6) {
-      Alert.alert('Mot de passe trop court', 'Le nouveau mot de passe doit comporter au moins 6 caractères.');
+      Alert.alert(t('common.error'), t('auth.passwordSixDigits'));
       return;
     }
 
     setForgotLoading(true);
     try {
-      const verif = await verifyPhoneCode(forgotId, cleanCode, expectedForgotCode);
+      const verif = await verifyPhoneCode(forgotId, cleanCode, expectedForgotCode, selectedCountry.dialCode);
       if (!verif.success) {
-        Alert.alert('Code incorrect', verif.error || 'Le code à 6 chiffres est erroné.');
+        Alert.alert(t('auth.invalidCode'), t('auth.invalidCodeDesc'));
         setForgotLoading(false);
         return;
       }
 
-      const res = await resetPasswordWithPhone(forgotId, cleanPass);
+      const res = await resetPasswordWithPhone(forgotId, cleanPass, selectedCountry.dialCode);
       if (res.success) {
-        Alert.alert('Succès 🎉', res.message || 'Votre mot de passe a été modifié avec succès !');
+        Alert.alert(t('common.success'), t('auth.resetSuccess'));
         setIdentifier(forgotId);
         setForgotModalVisible(false);
         setForgotStep(1);
@@ -270,10 +277,10 @@ export default function LoginScreen({ navigation, route }) {
         setNewPassword('');
         setForgotId('');
       } else {
-        Alert.alert('Erreur', res.error || 'Impossible de mettre à jour le mot de passe.');
+        Alert.alert(t('common.error'), res.error || t('auth.loginError'));
       }
     } catch (error) {
-      Alert.alert('Erreur', 'Une erreur technique est survenue.');
+      Alert.alert(t('common.error'), t('auth.networkErrorDesc'));
     } finally {
       setForgotLoading(false);
     }
@@ -304,6 +311,12 @@ export default function LoginScreen({ navigation, route }) {
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode="on-drag"
         >
+          {/* SÉLECTEUR DE LANGUE DISCRET (FR / EN) */}
+          <View style={styles.topLangRow}>
+            <View style={{ flex: 1 }} />
+            <LanguagePill />
+          </View>
+
           {/* LOGO PARFAITEMENT DÉTOURÉ & ADAPTÉ AU CLAVIER */}
           <View style={[styles.logoWrapper, isKeyboardVisible && styles.logoWrapperCompact]}>
             <Image 
@@ -313,20 +326,23 @@ export default function LoginScreen({ navigation, route }) {
             />
           </View>
 
-          <Text style={[styles.title, isKeyboardVisible && styles.titleCompact]}>Connexion</Text>
-          <Text style={[styles.subtitle, isKeyboardVisible && styles.subtitleCompact]}>Bienvenue sur Logetudiant Sénégal</Text>
+          <Text style={[styles.title, isKeyboardVisible && styles.titleCompact]}>{t('auth.loginTitle')}</Text>
+          <Text style={[styles.subtitle, isKeyboardVisible && styles.subtitleCompact]}>{t('auth.loginSubtitle')}</Text>
 
-          {/* CHAMP NUMÉRO DE TÉLÉPHONE (9 CHIFFRES) */}
+          {/* CHAMP NUMÉRO DE TÉLÉPHONE AVEC SÉLECTEUR DE PAYS AFRICAIN */}
           <View style={styles.inputContainer}>
-            <Ionicons name="call-outline" size={20} color="#003880" style={styles.inputIcon} />
+            <CountryPickerButton
+              selectedCountry={selectedCountry}
+              onPress={() => setCountryModalVisible(true)}
+            />
             <TextInput
               style={styles.inputField}
-              placeholder="Numéro de téléphone"
+              placeholder={selectedCountry.samplePhone || t('auth.phonePlaceholder')}
               placeholderTextColor="#94A3B8"
               value={identifier}
               onChangeText={setIdentifier}
               keyboardType="numeric"
-              maxLength={9}
+              maxLength={selectedCountry.phoneLength || 10}
               onFocus={() => {
                 setTimeout(() => {
                   scrollViewRef.current?.scrollTo({ y: 0, animated: true });
@@ -340,7 +356,7 @@ export default function LoginScreen({ navigation, route }) {
             <Ionicons name="lock-closed-outline" size={20} color="#003880" style={styles.inputIcon} />
             <TextInput
               style={styles.inputField}
-              placeholder="Mot de passe (6 chiffres)"
+              placeholder={t('auth.passwordPlaceholder')}
               placeholderTextColor="#94A3B8"
               value={password}
               onChangeText={setPassword}
@@ -371,7 +387,7 @@ export default function LoginScreen({ navigation, route }) {
             onPress={openForgotModal} 
             style={styles.forgotPasswordContainer}
           >
-            <Text style={styles.forgotPasswordText}>Mot de passe oublié ?</Text>
+            <Text style={styles.forgotPasswordText}>{t('auth.forgotPassword')}</Text>
           </TouchableOpacity>
 
           {/* BOUTON SE CONNECTER (BLEU ROYAL HARMONISÉ) */}
@@ -385,7 +401,7 @@ export default function LoginScreen({ navigation, route }) {
               <ActivityIndicator color="#fff" />
             ) : (
               <View style={styles.buttonContent}>
-                <Text style={styles.buttonText}>Se connecter</Text>
+                <Text style={styles.buttonText}>{t('auth.loginButton')}</Text>
                 <Ionicons name="arrow-forward" size={18} color="#fff" style={{ marginLeft: 6 }} />
               </View>
             )}
@@ -393,9 +409,9 @@ export default function LoginScreen({ navigation, route }) {
           
           {/* LIEN VERS L'INSCRIPTION */}
           <View style={styles.registerLinkRow}>
-            <Text style={styles.registerPromptText}>Pas encore de compte ? </Text>
+            <Text style={styles.registerPromptText}>{t('auth.noAccount')}</Text>
             <TouchableOpacity onPress={() => navigation.navigate('Register')}>
-              <Text style={styles.registerLinkText}>S'inscrire</Text>
+              <Text style={styles.registerLinkText}>{t('auth.registerLink')}</Text>
             </TouchableOpacity>
           </View>
         </ScrollView>
@@ -455,26 +471,29 @@ export default function LoginScreen({ navigation, route }) {
                 </Text>
 
                 <View style={[styles.inputContainer, { marginTop: 8 }]}>
-                  <Ionicons name="call-outline" size={20} color="#003880" style={styles.inputIcon} />
+                  <CountryPickerButton
+                    selectedCountry={selectedCountry}
+                    onPress={() => setCountryModalVisible(true)}
+                  />
                   <TextInput
                     style={styles.inputField}
-                    placeholder="Numéro de téléphone"
+                    placeholder={selectedCountry.samplePhone || "Numéro de téléphone"}
                     placeholderTextColor="#94A3B8"
                     value={forgotId}
                     onChangeText={setForgotId}
                     autoCapitalize="none"
                     keyboardType="numeric"
-                    maxLength={9}
+                    maxLength={selectedCountry.phoneLength || 10}
                   />
                 </View>
 
                 <TouchableOpacity 
                   style={[
                     styles.modalConfirmBtn,
-                    forgotId.trim().length === 9 ? styles.modalConfirmBtnActive : styles.modalConfirmBtnDisabled
+                    forgotId.trim().length >= (selectedCountry.phoneLength ? selectedCountry.phoneLength - 1 : 8) ? styles.modalConfirmBtnActive : styles.modalConfirmBtnDisabled
                   ]} 
                   onPress={handleSendForgotCode}
-                  disabled={forgotLoading || forgotId.trim().length !== 9}
+                  disabled={forgotLoading || forgotId.trim().length < (selectedCountry.phoneLength ? selectedCountry.phoneLength - 1 : 8)}
                   activeOpacity={0.85}
                 >
                   {forgotLoading ? (
@@ -498,7 +517,7 @@ export default function LoginScreen({ navigation, route }) {
               <>
                 <Text style={styles.modalDescCentered}>
                   Saisissez le code à 6 chiffres envoyé au{'\n'}
-                  <Text style={styles.phoneHighlight}>+221 {forgotId}</Text>
+                  <Text style={styles.phoneHighlight}>{selectedCountry.dialCode} {forgotId}</Text>
                 </Text>
 
                 {/* 6 CELLULES DU CODE PIN OTP ULTRA-PROFESSIONNEL */}
@@ -612,11 +631,29 @@ export default function LoginScreen({ navigation, route }) {
           </View>
         </KeyboardAvoidingView>
       </Modal>
+
+      {/* SÉLECTEUR DE PAYS AFRICAINS */}
+      <CountryPickerModal
+        visible={countryModalVisible}
+        onClose={() => setCountryModalVisible(false)}
+        onSelectCountry={(country) => {
+          setSelectedCountry(country);
+          setIdentifier('');
+        }}
+        selectedCountry={selectedCountry}
+      />
     </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
+  topLangRow: {
+    width: '100%',
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    marginBottom: 8,
+    paddingHorizontal: 4,
+  },
   container: {
     paddingHorizontal: 24,
     paddingTop: 24,

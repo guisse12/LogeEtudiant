@@ -12,14 +12,18 @@
       "distribution": "internal",
       "android": {
         "buildType": "apk"
+      },
+      "ios": {
+        "simulator": true
       }
     },
     "production": {
-      "credentialsSource": "local",
       "autoIncrement": true,
       "android": {
-        "buildType": "app-bundle"
-      }
+        "buildType": "app-bundle",
+        "credentialsSource": "local"
+      },
+      "ios": {}
     }
   },
   "submit": {
